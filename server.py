@@ -5,6 +5,7 @@
 #########################################
 
 import socket
+import select
 
 IP_ADDRESS = socket.gethostname()
 PORT = 1081
@@ -45,8 +46,8 @@ clients = {}
 # Main server loop
 while True:
     # Get the ready sockets
-    read_sockets, write_sockets, error_sockets =
-    select.select(sockets, [], sockets)
+    read_sockets, write_sockets, error_sockets = (
+        select.select(sockets, [], sockets))
 
     for ready_socket in read_sockets:
         # New connection
