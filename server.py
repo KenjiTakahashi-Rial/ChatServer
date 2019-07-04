@@ -27,6 +27,10 @@ sockets = [server_socket]
 clients = {}
 usernames = {}
 
+# Rooms dictionary has the room name and the list of clients currently
+# inside the room
+rooms = {"chat": [], "hottub": [], "PAD": [], "anime": []}
+
 
 def send_message(message, client_socket):
     """
@@ -60,7 +64,7 @@ def get_message(client_socket):
     Arguments:
         A client socket to get a message from
     Return Value:
-        The message received
+        True if the message was received successfully
         False if a connection was terminated or an error occurred
     """
 
@@ -83,6 +87,37 @@ def get_message(client_socket):
         connection_terminated(client_socket)
 
         return False
+
+
+def server_command(command, client_socket):
+    """
+    Description:
+        When a user precedes a message with backslash, it is
+        interpreted as a command. This parses it.
+    Arguments:
+        A command to be executed
+    Return Value:
+        True if the command was carried out
+        False if there was an error
+    """
+
+    commands = {"rooms": rooms, "r": rooms,
+                "join": join, "j": join,
+                "leave": leave, "l": leave,
+                "exit": exit, "x": exit,
+                "quit": exit, "q": exit}
+
+    def rooms():
+        pass
+
+    def join():
+        pass
+
+    def leave():
+        pass
+
+    def exit():
+        connection_terminated(client_socket)
 
 
 def initialize_user(client_socket, client_address):
@@ -133,7 +168,7 @@ def connection_terminated(client_socket):
         Prints a message that a client terminated their connection and
         removes the client from the server
     Arguments:
-        A client socket to remove
+        A client socket whos connection was or is to be terminated
     Return Value:
         None
     """
@@ -150,6 +185,8 @@ def connection_terminated(client_socket):
 
     else:
         print(f"\nConnection {str_address} terminated by unnamed client\n")
+
+    client_socket.close()
 
 
 # Main server loop

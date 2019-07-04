@@ -35,7 +35,7 @@ def send_message(message):
         A message to send
     Return Value:
         True if the message sent successfully
-        False if the message is blank
+        False if the message is blank or an error occurred
     """
 
     # Do not send blank messages
@@ -50,6 +50,8 @@ def send_message(message):
     except Exception as e:
         connection_error()
 
+        return False
+
 
 def get_message():
     """
@@ -58,8 +60,8 @@ def get_message():
     Arguments:
         None
     Return Value:
-        The message received
-        False if no messages to receive
+        True if the message was received successfully
+        False if no messages to receive or an error occurred
     """
 
     try:
@@ -85,6 +87,8 @@ def get_message():
     # Any other errors catch here
     except Exception as e:
         connection_error()
+
+        return False
 
 
 def connection_error():
