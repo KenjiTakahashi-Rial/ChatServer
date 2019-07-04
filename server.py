@@ -41,7 +41,8 @@ def initialize_user(client_socket):
     # a valid username is given
     while True:
         ask_name = "Username?: "
-        client_socket.send(f"{len(ask_name):<{HEADER_LENGTH}}".encode('utf-8'))
+        client_socket.send((f"{len(ask_name):<{HEADER_LENGTH}}" +
+                           ask_name).encode('utf-8'))
 
         username = receive_data(client_socket)['message'].decode('utf-8')
 
@@ -49,8 +50,8 @@ def initialize_user(client_socket):
             break
 
         name_taken = f"Sorry, {username} is taken"
-        client_socket.send(f"{len(name_taken):<{HEADER_LENGTH}}".encode('utf-8'),
-                           name_taken.encode('utf-8'))
+        client_socket.send((f"{len(name_taken):<{HEADER_LENGTH}}" +
+                           name_taken).encode('utf-8'))
 
     sockets.append(client_socket)
     clients[client_socket] = username
