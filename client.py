@@ -58,4 +58,6 @@ def get_user_message():
 
 # Main client loop
 while True:
-
+    message = input("=> ")
+    while True:
+        print(get_server_message())

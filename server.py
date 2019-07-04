@@ -40,36 +40,54 @@ def initialize_user(client_socket):
     # Check if a username is already in use and keep asking until
     # a valid username is given
     while True:
-        ask_name = "Username?: "
-        client_socket.send((f"{len(ask_name):<{HEADER_LENGTH}}" +
-                           ask_name).encode('utf-8'))
+        send_message("Username?: ", client_socket)
 
-        username = get_data(client_socket)['message'].decode('utf-8')
+        username = get_message(client_socket)
 
         if username not in usernames:
             break
 
-        name_taken = f"Sorry, {username} is taken\n"
-        client_socket.send((f"{len(name_taken):<{HEADER_LENGTH}}" +
-                           name_taken).encode('utf-8'))
+        name_taken(f"Sorry, {username} is taken\n", client_socket)
 
     sockets.append(client_socket)
     clients[client_socket] = username
     usernames[username] = client_socket
 
-    welcome = f"Welcome, {username}!"
+    send_message(f"Welcome, {username}!", client_socket)
 
     return username
 
 
-def get_data(client_socket):
+def send_message(message, client_socket):
     """
     Description:
-        Handles receiving data from a client
+        Handles sending a message to a client
     Arguments:
-        A client socket to get data from
+        A client socket to send a message to
     Return Value:
-        A dictionary with the encoded header and message data
+        True if the message sent successfully
+        False if an error occurred
+    """
+
+    try:
+        header = "{len(message):<{HEADER_LENGTH}}"
+        client_socket.send((header + message).encode('utf-8'))
+
+        return True
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+
+def get_message(client_socket):
+    """
+    Description:
+        Handles receiving a message from a client
+    Arguments:
+        A client socket to get a message from
+    Return Value:
+        A string of the message
     """
 
     header = client_socket.recv(HEADER_LENGTH)
@@ -90,23 +108,20 @@ while True:
         if ready_socket == server_socket:
             client_socket, client_address = server_socket.accept()
 
-            welcome = "Welcome to the GungHo test chat server\n"
-            client_socket.send((f"{len(welcome):<{HEADER_LENGTH}}" +
-                                welcome).encode('utf-8'))
+            send_message("Welcome to the GungHo chat server\n", client_socket)
 
             new_user = initialize_user(client_socket)
 
             print(f"\nNew connection: {client_address[0]}:{client_address[1]}",
                   f", Username: {new_user}\n")
 
-        # Get data and distribute message to clients
+        # Get a message and distribute to clients
         else:
-            data = get_data(ready_socket)
-            user = clients[ready_socket]
+            message = get_message(ready_socket)
+            username = clients[ready_socket]
 
             for client_socket in clients:
-                client_socket.send(user['header'] + user['message'] +
-                                   data['header'] + data['message'])
+                send_message("{username}: {message}", client_socket)
 
     # Error handling
     for ready_socket in error_sockets:
