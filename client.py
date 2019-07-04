@@ -18,6 +18,23 @@ client_socket.connect((IP_ADDRESS, PORT))
 client_socket.setblocking(False)
 
 
+def get_server_message():
+    """
+    Description:
+        Handles getting messages from the server
+    Arguments:
+        None
+    Return Value:
+        A string of the message
+    """
+
+    header = client_socket.recv(HEADER_LENGTH)
+    head_len = int(header.decode('utf-8').strip())
+    message = client_socket.recv(head_len).decode('utf-8')
+
+    return message
+
+
 def get_user_message():
     """
     Description:
