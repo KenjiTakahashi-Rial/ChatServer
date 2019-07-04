@@ -58,13 +58,19 @@ def get_message(client_socket):
         A client socket to get a message from
     Return Value:
         The message received
+        False if an error occurred
     """
 
-    header = client_socket.recv(HEADER_LENGTH)
-    msg_len = int(header.decode('utf-8').strip())
-    message = client_socket.recv(msg_len).decode('utf-8')
+    try:
+        header = client_socket.recv(HEADER_LENGTH)
+        msg_len = int(header.decode('utf-8').strip())
+        message = client_socket.recv(msg_len).decode('utf-8')
 
-    return message
+        return message
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
 
 
 def initialize_user(client_socket):
@@ -86,7 +92,7 @@ def initialize_user(client_socket):
         print(username)
 
         if username in usernames:
-            name_taken(f"Sorry, {username} is taken\n", client_socket) 
+            name_taken(f"Sorry, {username} is taken\n", client_socket)
             continue
 
         break

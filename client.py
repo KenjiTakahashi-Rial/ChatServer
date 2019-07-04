@@ -26,13 +26,19 @@ def get_message():
         None
     Return Value:
         The message received
+        False if an error occured
     """
 
-    header = client_socket.recv(HEADER_LENGTH)
-    head_len = int(header.decode('utf-8').strip())
-    message = client_socket.recv(head_len).decode('utf-8')
+    try:
+        header = client_socket.recv(HEADER_LENGTH)
+        head_len = int(header.decode('utf-8').strip())
+        message = client_socket.recv(head_len).decode('utf-8')
 
-    return message
+        return message
+
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
 
 
 def send_message(message):
