@@ -44,7 +44,7 @@ def initialize_user(client_socket):
         client_socket.send((f"{len(ask_name):<{HEADER_LENGTH}}" +
                            ask_name).encode('utf-8'))
 
-        username = receive_data(client_socket)['message'].decode('utf-8')
+        username = get_data(client_socket)['message'].decode('utf-8')
 
         if username not in usernames:
             break
@@ -62,12 +62,12 @@ def initialize_user(client_socket):
     return username
 
 
-def receive_data(client_socket):
+def get_data(client_socket):
     """
     Description:
         Handles receiving data from a client
     Arguments:
-        A client socket to receive data from
+        A client socket to get data from
     Return Value:
         A dictionary with the encoded header and message data
     """
@@ -99,9 +99,9 @@ while True:
             print(f"\nNew connection: {client_address[0]}:{client_address[1]}",
                   f", Username: {new_user}\n")
 
-        # Receive data and distribute message to clients
+        # Get data and distribute message to clients
         else:
-            data = receive_data(ready_socket)
+            data = get_data(ready_socket)
             user = clients[ready_socket]
 
             for client_socket in clients:
