@@ -4,8 +4,9 @@
 # by Kenji Takahashi-Rial               #
 #########################################
 
-import socket
 import select
+import socket
+import sys
 
 IP_ADDRESS = socket.gethostname()
 PORT = 1081
@@ -40,13 +41,16 @@ def send_message(message, client_socket):
     """
 
     try:
-        header = "{len(message):<{HEADER_LENGTH}}"
+        header = f"{len(message):<{HEADER_LENGTH}}"
         client_socket.send((header + message).encode('utf-8'))
 
         return True
 
     except Exception as e:
-        print(f"Error: {e}")
+        ex_client = clients[client_socket]
+        print(f"Connection {ex_client[0]} " +
+              f"closed by client {ex_client[1]}")
+
         return False
 
 
@@ -58,48 +62,63 @@ def get_message(client_socket):
         A client socket to get a message from
     Return Value:
         The message received
-        False if an error occurred
+        False if a connection was aborted or an error occurred
     """
 
     try:
         header = client_socket.recv(HEADER_LENGTH)
+
+        # If connection is aborted, there is no header
+        if len(header) == 0:
+            return False
+
         msg_len = int(header.decode('utf-8').strip())
         message = client_socket.recv(msg_len).decode('utf-8')
 
         return message
 
     except Exception as e:
-        print(f"Error: {e}")
         return False
 
 
-def initialize_user(client_socket):
+def initialize_user(client_socket, client_address):
     """
     Description:
         Gets the client data and stores it in the server
     Agruments:
         A client socket to initialize
+        The client's address
     Return Value:
         The client's chosen username
+        False if connection was aborted or an error occurred
     """
 
-    # Check if a username is already in use and keep asking until
-    # a valid username is given
+    send_message("Welcome to the GungHo test chat server", client_socket)
+
+    str_address = f"{client_address[0]}:{client_address[1]}"
+
+    # Get the desired username
     while True:
         send_message("Username?: ", client_socket)
-
         username = get_message(client_socket)
-        print(username)
 
+        # Connection aborted before name given
+        if not username:
+            print(f"Connection {str_address} closed by unnamed client")
+
+            return False
+
+        # If username is taken, continue asking
         if username in usernames:
             name_taken(f"Sorry, {username} is taken\n", client_socket)
             continue
 
         break
 
+    # Add user data to the server
     sockets.append(client_socket)
-    clients[client_socket] = username
     usernames[username] = client_socket
+    clients[client_socket] = (str_address, username)
 
     send_message(f"Welcome, {username}!", client_socket)
 
@@ -117,22 +136,36 @@ while True:
         if ready_socket == server_socket:
             client_socket, client_address = server_socket.accept()
 
-            send_message("Welcome to the GungHo chat server\n", client_socket)
+            new_user = initialize_user(client_socket, client_address)
 
-            new_user = initialize_user(client_socket)
-
-            print(f"\nNew connection: {client_address[0]}:{client_address[1]}",
-                  f", Username: {new_user}\n")
+            if new_user:
+                print(f"\nNew connection: {client_address[0]}:" +
+                      f"{client_address[1]}, Username: {new_user}\n")
 
         # Get a message and distribute to clients
         else:
             message = get_message(ready_socket)
-            username = clients[ready_socket]
 
-            for client_socket in clients:
-                send_message("{username}: {message}", client_socket)
+            # A connections was aborted
+            if not message:
+                ex_client = clients[ready_socket]
+
+                print(f"Connection {ex_client[0]} " +
+                      f"closed by client {ex_client[1]}")
+
+                sockets.remove(ready_socket)
+                del usernames[ex_client[1]]
+                del ex_client
+
+            # Normal message
+            else:
+                username = clients[ready_socket][1]
+
+                for client_socket in clients:
+                    send_message(f"{username}: {message}", client_socket)
 
     # Error handling
     for ready_socket in error_sockets:
         sockets.remove(ready_socket)
         del clients[ready_socket]
+        del usernames[clients[ready_socket]]
