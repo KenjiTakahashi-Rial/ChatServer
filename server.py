@@ -37,12 +37,23 @@ def initialize_user(client_socket):
         Returns the new client's username
     """
 
-    user = receive_data(client_socket)
+    # Check if a username is already in use and keep asking until
+    # a valid username is given
+    while True:
+        ask_name = "Username?: "
+        client_socket.send(f"{len(ask_name):<{HEADER_LENGTH}}".encode('utf-8'))
+
+        username = receive_data(client_socket)['message'].decode('utf-8')
+
+        if username not in usernames:
+            break
+
+        name_taken = f"Sorry, {username} is taken"
+        client_socket.send(f"{len(name_taken):<{HEADER_LENGTH}}".encode('utf-8'),
+                           name_taken.encode('utf-8'))
 
     sockets.append(client_socket)
-    clients[client_socket] = user
-
-    username = user['message'].decode('utf-8')
+    clients[client_socket] = username
     usernames[username] = client_socket
 
     return username
