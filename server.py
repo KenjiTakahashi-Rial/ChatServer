@@ -27,37 +27,6 @@ clients = {}
 usernames = {}
 
 
-def initialize_user(client_socket):
-    """
-    Description:
-        Gets the client data and stores it in the server
-    Agruments:
-        A client socket to initialize
-    Return Value:
-        The client's chosen username
-    """
-
-    # Check if a username is already in use and keep asking until
-    # a valid username is given
-    while True:
-        send_message("Username?: ", client_socket)
-
-        username = get_message(client_socket)
-
-        if username not in usernames:
-            break
-
-        name_taken(f"Sorry, {username} is taken\n", client_socket)
-
-    sockets.append(client_socket)
-    clients[client_socket] = username
-    usernames[username] = client_socket
-
-    send_message(f"Welcome, {username}!", client_socket)
-
-    return username
-
-
 def send_message(message, client_socket):
     """
     Description:
@@ -93,9 +62,42 @@ def get_message(client_socket):
 
     header = client_socket.recv(HEADER_LENGTH)
     msg_len = int(header.decode('utf-8').strip())
-    message = client_socket.recv(msg_len)
+    message = client_socket.recv(msg_len).decode('utf-8')
 
-    return {'header': header, 'message': message}
+    return message
+
+
+def initialize_user(client_socket):
+    """
+    Description:
+        Gets the client data and stores it in the server
+    Agruments:
+        A client socket to initialize
+    Return Value:
+        The client's chosen username
+    """
+
+    # Check if a username is already in use and keep asking until
+    # a valid username is given
+    while True:
+        send_message("Username?: ", client_socket)
+
+        username = get_message(client_socket)
+        print(username)
+
+        if username in usernames:
+            name_taken(f"Sorry, {username} is taken\n", client_socket) 
+            continue
+
+        break
+
+    sockets.append(client_socket)
+    clients[client_socket] = username
+    usernames[username] = client_socket
+
+    send_message(f"Welcome, {username}!", client_socket)
+
+    return username
 
 
 # Main server loop

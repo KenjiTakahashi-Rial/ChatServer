@@ -46,11 +46,11 @@ def send_message(message):
         False if the message is blank or an error occurred
     """
 
-    if len(message.strip() == 0):
+    if len(message.strip()) == 0:
         return False
 
     try:
-        header = "{len(message):<{HEADER_LENGTH}}"
+        header = f"{len(message):<{HEADER_LENGTH}}"
         client_socket.send((header + message).encode('utf-8'))
 
         return True
@@ -64,4 +64,5 @@ def send_message(message):
 while True:
     message = input("=> ")
     while True:
-        print(get_message())
+        if not send_message(message):
+            break
