@@ -18,10 +18,10 @@ client_socket.connect((IP_ADDRESS, PORT))
 client_socket.setblocking(False)
 
 
-def get_server_message():
+def get_message():
     """
     Description:
-        Handles getting messages from the server
+        Handles getting a message from the server
     Arguments:
         None
     Return Value:
@@ -35,29 +35,8 @@ def get_server_message():
     return message
 
 
-def get_user_message():
-    """
-    Description:
-        Handles getting messages from a user
-    Arguments:
-        None
-    Return Value:
-        A string of the message
-    """
-
-    user_header = client_socket.recv(HEADER_LENGTH)
-    user_length = int(user_header.decode('utf-8').strip())
-    username = client_socket.recv(user_length).decode('utf-8')
-
-    msg_header = client_socket.recv(HEADER_LENGTH)
-    msg_len = int(msg_header.decode('utf-8').strip())
-    message = client_socket.recv(msg_len).decode('utf-8')
-
-    return f"{username}: {message}"
-
-
 # Main client loop
 while True:
     message = input("=> ")
     while True:
-        print(get_server_message())
+        print(get_message())
