@@ -1,145 +1,182 @@
 #########################################
 # server.py                             #
-# The chat server                       #
+# The Server object and functions       #
 # by Kenji Takahashi-Rial               #
 #########################################
 
-import select
 import socket
 import sys
 
-from server_messaging import *
+import client
 
 
-# INITIAL SETUP #################################################
+class Server():
 
+    def __init__(self, server_socket, rooms={}, header_length=8):
+        self.socket = server_socket
+        self.sockets = [server_socket]
+        self.clients = {}
+        self.usernames = []
+        self.rooms = rooms
+        self.header_length = header_length
 
-IP_ADDRESS = socket.gethostname()
-PORT = 1081
+    def send(self, message, client_socket):
+        """
+        Description:
+            Handles sending a message to a client
+        Arguments:
+            A Server object
+            A message to send
+            A client socket to send a message to
+        Return Value:
+            True if the message sent successfully
+            False if an error occurred
+        """
 
-# Set up the server socket and start listening
-server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            header = f"{len(message):<{self.header_length}}"
+            client_socket.send((header + message).encode('utf-8'))
 
-# Allows reuse of address/port
-server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            return True
 
-server_socket.bind((IP_ADDRESS, PORT))
-server_socket.listen()
+        # Exceptions indicate ungraceful client termanation
+        except Exception as e:
+            self.connection_terminated(client_socket)
 
-print(f"\nListening for connections on {IP_ADDRESS}:{PORT}...\n")
-
-# Keep track of sockets and client information
-sockets = [server_socket]
-clients = {}
-usernames = {}
-
-# Rooms dictionary has the room name and the list of clients currently
-# inside the room
-rooms = {"chat": [], "hottub": [], "PAD": [], "anime": []}
-
-
-# FUNCTIONS ######################################################
-
-
-def initialize_user(client_socket, client_address):
-    """
-    Description:
-        Gets the client data and stores it in the server
-    Agruments:
-        A client socket to initialize
-        The client's address
-    Return Value:
-        The client's chosen username
-        False if connection was terminated or an error occurred
-    """
-
-    send_message("Welcome to the GungHo test chat server", client_socket)
-
-    str_address = f"{client_address[0]}:{client_address[1]}"
-
-    # Get the desired username
-    while True:
-        send_message("Username?: ", client_socket)
-        username = get_message(client_socket)
-
-        # Connection terminated before name given
-        if not username:
             return False
 
-        # If username is taken, continue asking
-        if username in usernames:
-            send_message(f"Sorry, {username} is taken", client_socket)
-            continue
+    def receive(self, client_socket):
+        """
+        Description:
+            Handles receiving a message from a client
+        Arguments:
+            A Server object
+            A client socket to receive a message from
+        Return Value:
+            True if the message was received successfully
+            False if a connection was terminated or an error occurred
+        """
 
-        break
+        try:
+            header = client_socket.recv(self.header_length)
 
-    # Add user data to the server
-    sockets.append(client_socket)
-    usernames[username] = client_socket
-    clients[client_socket] = (str_address, username)
+            # If connection was terminated, there is no header
+            if len(header) == 0:
+                self.connection_terminated(client_socket)
 
-    send_message(f"Welcome, {username}!", client_socket)
+                return False
 
-    return username
+            msg_len = int(header.decode('utf-8').strip())
+            message = client_socket.recv(msg_len).decode('utf-8')
 
+            return message
 
-def connection_terminated(client_socket):
-    """
-    Description:
-        Prints a message that a client terminated their connection and
-        removes the client from the server
-    Arguments:
-        A client socket whos connection was or is to be terminated
-    Return Value:
-        None
-    """
+        # Exceptions indicate ungraceful client termanation
+        except Exception as e:
+            self.connection_terminated(client_socket)
 
-    if client_socket in clients:
-        ex_client = clients[client_socket]
+            return False
 
-        print(f"\nConnection {ex_client[0]} " +
-              f"terminated by client {ex_client[1]}\n")
+    def server_command(self, command, client_socket):
+        """
+        Description:
+            When a user precedes a message with backslash, it is
+            interpreted as a command. This parses it.
+        Arguments:
+            A Server object
+            A command to be executed
+        Return Value:
+            True if the command was carried out
+            False if there was an error
+        """
 
-        sockets.remove(ready_socket)
-        del usernames[ex_client[1]]
-        del ex_client
+        commands = {"rooms": rooms, "r": rooms,
+                    "join": join, "j": join,
+                    "leave": leave, "l": leave,
+                    "exit": exit, "x": exit,
+                    "quit": exit, "q": exit}
 
-    else:
-        print(f"\nConnection {str_address} terminated by unnamed client\n")
+        def rooms():
+            pass
 
-    # client_socket.close()
+        def join():
+            pass
 
+        def leave():
+            pass
 
-# MAIN SERVER LOOP ##################################################
+        def exit():
+            connection_terminated(client_socket)
 
+    def initialize_user(self, client_socket):
+        """
+        Description:
+            Gets the client data and stores it in the server
+        Agruments:
+            A Server object
+            A client socket to initialize
+            The client's address
+        Return Value:
+            A new client object
+            False if connection was terminated or an error occurred
+        """
 
-while True:
-    # Get the ready sockets
-    read_sockets, write_sockets, error_sockets = (
-        select.select(sockets, [], sockets))
+        self.send("Welcome to the GungHo test chat server", client_socket)
 
-    for ready_socket in read_sockets:
-        # New connection
-        if ready_socket == server_socket:
-            client_socket, client_address = server_socket.accept()
+        # Get the desired username
+        while True:
+            self.send("Username?: ", client_socket)
+            username = self.receive(client_socket)
 
-            new_user = initialize_user(client_socket, client_address)
+            # Connection terminated before name given
+            if not username:
+                return False
 
-            if new_user:
-                print(f"\nNew connection: {client_address[0]}:" +
-                      f"{client_address[1]}, Username: {new_user}\n")
+            # If username is taken, continue asking
+            if username in self.usernames:
+                self.send(f"Sorry, {username} is taken", client_socket)
+                continue
 
-        # Get a message and distribute to clients
+            break
+
+        # New client object
+        new_client = client.Client(client_socket, username, self.header_length)
+
+        # Add user data to the server
+        self.sockets.append(client_socket)
+        self.usernames.append(username)
+        self.clients[client_socket] = new_client
+
+        self.send(f"Welcome, {username}!", client_socket)
+
+        return new_client
+
+    def connection_terminated(self, client_socket):
+        """
+        Description:
+            Prints a message that a client terminated their connection and
+            removes the client from the server
+        Arguments:
+            A Server object
+            A client socket whos connection was or is to be terminated
+        Return Value:
+            None
+        """
+
+        if client_socket in self.clients:
+            ex_client = self.clients[client_socket]
+
+            print(f"\nConnection {ex_client.address} terminated by client " +
+                  f"{ex_client.username}\n")
+
+            self.sockets.remove(ex_client.socket)
+            self.usernames.remove(ex_client.username)
+            del ex_client
+
         else:
-            message = get_message(ready_socket)
+            str_address = (f"{client_socket.getsockname()[0]}:" +
+                           f"{client_socket.getsockname()[1]}")
 
-            # Normal message
-            if message is not False:
-                username = clients[ready_socket][1]
+            print(f"\nConnection {str_address} terminated by unnamed client\n")
 
-                for client_socket in clients:
-                    send_message(f"{username}: {message}", client_socket)
-
-    # Error handling
-    for ready_socket in error_sockets:
-        connection_terminated(ready_socket)
+        client_socket.close()
