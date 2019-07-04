@@ -34,7 +34,7 @@ def initialize_user(client_socket):
     Agruments:
         A client socket to initialize
     Return Value:
-        Returns the new client's username
+        The client's chosen username
     """
 
     # Check if a username is already in use and keep asking until
@@ -63,6 +63,7 @@ def send_message(message, client_socket):
     Description:
         Handles sending a message to a client
     Arguments:
+        A message to send
         A client socket to send a message to
     Return Value:
         True if the message sent successfully
@@ -87,7 +88,7 @@ def get_message(client_socket):
     Arguments:
         A client socket to get a message from
     Return Value:
-        A string of the message
+        The message received
     """
 
     header = client_socket.recv(HEADER_LENGTH)
