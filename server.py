@@ -46,10 +46,9 @@ def send_message(message, client_socket):
 
         return True
 
+    # Exceptions indicate ungraceful client termanation
     except Exception as e:
-        ex_client = clients[client_socket]
-        print(f"Connection {ex_client[0]} " +
-              f"closed by client {ex_client[1]}")
+        connection_terminated(client_socket)
 
         return False
 
@@ -62,14 +61,16 @@ def get_message(client_socket):
         A client socket to get a message from
     Return Value:
         The message received
-        False if a connection was aborted or an error occurred
+        False if a connection was terminated or an error occurred
     """
 
     try:
         header = client_socket.recv(HEADER_LENGTH)
 
-        # If connection is aborted, there is no header
+        # If connection was terminated, there is no header
         if len(header) == 0:
+            connection_terminated(client_socket)
+
             return False
 
         msg_len = int(header.decode('utf-8').strip())
@@ -77,7 +78,10 @@ def get_message(client_socket):
 
         return message
 
+    # Exceptions indicate ungraceful client termanation
     except Exception as e:
+        connection_terminated(client_socket)
+
         return False
 
 
@@ -90,7 +94,7 @@ def initialize_user(client_socket, client_address):
         The client's address
     Return Value:
         The client's chosen username
-        False if connection was aborted or an error occurred
+        False if connection was terminated or an error occurred
     """
 
     send_message("Welcome to the GungHo test chat server", client_socket)
@@ -102,15 +106,13 @@ def initialize_user(client_socket, client_address):
         send_message("Username?: ", client_socket)
         username = get_message(client_socket)
 
-        # Connection aborted before name given
+        # Connection terminated before name given
         if not username:
-            print(f"Connection {str_address} closed by unnamed client")
-
             return False
 
         # If username is taken, continue asking
         if username in usernames:
-            name_taken(f"Sorry, {username} is taken\n", client_socket)
+            send_message(f"Sorry, {username} is taken", client_socket)
             continue
 
         break
@@ -123,6 +125,31 @@ def initialize_user(client_socket, client_address):
     send_message(f"Welcome, {username}!", client_socket)
 
     return username
+
+
+def connection_terminated(client_socket):
+    """
+    Description:
+        Prints a message that a client terminated their connection and
+        removes the client from the server
+    Arguments:
+        A client socket to remove
+    Return Value:
+        None
+    """
+
+    if client_socket in clients:
+        ex_client = clients[client_socket]
+
+        print(f"\nConnection {ex_client[0]} " +
+              f"terminated by client {ex_client[1]}\n")
+
+        sockets.remove(ready_socket)
+        del usernames[ex_client[1]]
+        del ex_client
+
+    else:
+        print(f"\nConnection {str_address} terminated by unnamed client\n")
 
 
 # Main server loop
@@ -146,19 +173,8 @@ while True:
         else:
             message = get_message(ready_socket)
 
-            # A connections was aborted
-            if not message:
-                ex_client = clients[ready_socket]
-
-                print(f"Connection {ex_client[0]} " +
-                      f"closed by client {ex_client[1]}")
-
-                sockets.remove(ready_socket)
-                del usernames[ex_client[1]]
-                del ex_client
-
             # Normal message
-            else:
+            if message is not False:
                 username = clients[ready_socket][1]
 
                 for client_socket in clients:
@@ -166,6 +182,4 @@ while True:
 
     # Error handling
     for ready_socket in error_sockets:
-        sockets.remove(ready_socket)
-        del clients[ready_socket]
-        del usernames[clients[ready_socket]]
+        connection_terminated(ready_socket)

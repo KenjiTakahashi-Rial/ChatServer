@@ -48,8 +48,7 @@ def send_message(message):
 
         return True
     except Exception as e:
-        print("Connection closed by the server")
-        sys.exit()
+        connection_error()
 
 
 def get_message():
@@ -66,10 +65,9 @@ def get_message():
     try:
         header = client_socket.recv(HEADER_LENGTH)
 
-        # If connection is aborted, there is no header
+        # If connection was terminated, there is no header
         if len(header) == 0:
-            print("Connection closed by the server")
-            sys.exit()
+            connection_error()
 
         head_len = int(header.decode('utf-8').strip())
         message = client_socket.recv(head_len).decode('utf-8')
@@ -80,15 +78,28 @@ def get_message():
     # so return False for those, otherwise print an error and exit
     except IOError as e:
         if e.errno != errno.EAGAIN and e.errno != errno.EWOULDBLOCK:
-            print("Connection closed by the server")
-            sys.exit()
+            connection_error()
 
         return False
 
     # Any other errors catch here
     except Exception as e:
-        print("Connection closed by the server")
-        sys.exit()
+        connection_error()
+
+
+def connection_error():
+    """
+    Description:
+        When a connection error occurs, the server most likely
+        terminated the connection. This prints a message to the client
+        and exits
+    Arguments:
+        None
+    Return Value:
+        None
+    """
+    print("<= Connection terminated by the server")
+    sys.exit()
 
 
 # Main client loop
