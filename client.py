@@ -16,3 +16,20 @@ HEADER_LENGTH = 8
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client_socket.connect((IP_ADDRESS, PORT))
 client_socket.setblocking(False)
+
+
+def receive_message():
+    """
+    Description:
+        Handles receiving messages from a the server
+    Arguments:
+        None
+    Return Value:
+        A string with the message inside
+    """
+
+    header = client_socket.recv(HEADER_LENGTH)
+    msg_len = int(header.decode('utf-8').strip())
+    message = client_socket.recv(msg_len)
+
+    return message

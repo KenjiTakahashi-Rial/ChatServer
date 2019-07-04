@@ -49,13 +49,15 @@ def initialize_user(client_socket):
         if username not in usernames:
             break
 
-        name_taken = f"Sorry, {username} is taken"
+        name_taken = f"Sorry, {username} is taken\n"
         client_socket.send((f"{len(name_taken):<{HEADER_LENGTH}}" +
                            name_taken).encode('utf-8'))
 
     sockets.append(client_socket)
     clients[client_socket] = username
     usernames[username] = client_socket
+
+    welcome = f"Welcome, {username}!"
 
     return username
 
@@ -87,6 +89,10 @@ while True:
         # New connection
         if ready_socket == server_socket:
             client_socket, client_address = server_socket.accept()
+
+            welcome = "Welcome to the GungHo test chat server\n"
+            client_socket.send((f"{len(welcome):<{HEADER_LENGTH}}" +
+                                welcome).encode('utf-8'))
 
             new_user = initialize_user(client_socket)
 
