@@ -100,7 +100,7 @@ class Server():
 
             return False
 
-    def distribute(self, data, rooms, sender=None, send_self=False):
+    def distribute(self, data, rooms, sender=None, except_users=[]):
         """
         Description:
             Distributes data to all users in a given room
@@ -109,8 +109,7 @@ class Server():
             Data to send
             A list of rooms to send to
             The client object who sent the data
-            A boolean indicating if the data should also be sent to
-            the original sender as well
+            A list of client objects not to send the message to
         Return Value:
             True if the data was distributed
             False if an error occurred
@@ -132,12 +131,13 @@ class Server():
             for user in self.rooms[room]:
                 # User sends data
                 if sender is not None:
-                    if send_self or user.username != sender.username:
+                    if user not in except_users:
                         self.send(f"{sender.username}: {data}", user.socket)
 
                 # Server sends a notification
                 else:
-                    self.send(data, user.socket)
+                    if user not in except_users:
+                        self.send(data, user.socket)
 
         return True
 
@@ -161,8 +161,6 @@ class Server():
         separated = input.split()
         cmd = separated[0]
         args = separated[1:]
-        print(f"cmd: {cmd}")
-        print(f"args: {args}")
 
         # Command definitions
         def rooms():
@@ -196,7 +194,8 @@ class Server():
                     client.room = a
 
                     # Notify other users that a new user has joined
-                    self.distribute(f"{client.username} joined the room.", [a])
+                    self.distribute(f"{client.username} joined the room.", [a],
+                                    None, [client])
 
                     # Notify the user that they joined the room
                     self.send(f"Joined the room: {a}", client_socket)
@@ -231,7 +230,8 @@ class Server():
 
         def leave():
             # Notify other users that a user has left
-            self.distribute(f"{client.username} left the room.", client.room)
+            self.distribute(f"{client.username} left the room.", [client.room],
+                            None, [client])
 
             # Remove the userfrom the rooms dictionary
             # and the room from the client object
@@ -271,7 +271,7 @@ class Server():
         try:
             return commands[cmd]()
 
-        # Incorrect command entered, show all valid commands
+        # # Incorrect command entered, show all valid commands
         except KeyError as e:
             self.send("Valid commands:", client_socket)
             self.send("{:<6} - See active rooms.".format(" * /rooms"),
@@ -282,7 +282,7 @@ class Server():
                       .format(" * /who"), client_socket)
             self.send("{:<6} - Leave your current room.".format(" * /leave"),
                       client_socket)
-            self.send("{:<6} - Close your chat client.".format(" * /exit"),
+            self.send("{:<6} - Close the chat client.".format(" * /exit"),
                       client_socket)
             self.send(" * To use backslash without a command: //",
                       client_socket)
@@ -322,7 +322,7 @@ class Server():
 
         # Normal data distribution
         # User sends a message to their room
-        return self.distribute(data, [client.room], client, True)
+        return self.distribute(data, [client.room], client)
 
     def initialize_user(self, client_socket):
         """
