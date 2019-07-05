@@ -177,7 +177,7 @@ class Server():
             Checks whether the received data is a command or data to
             send and carries out the appropriate functions
         Arguments:
-            A server object
+            A Server object
             String of data to process
             The client socket the data originated from
         Return Value:
@@ -190,7 +190,7 @@ class Server():
         # Reroute to command function
         if data[0] == '/':
             if len(data) == 1 or data[1] != '/':
-                return self.server_command(data, client_socket)
+                return self.server_command(data, client)
 
             # User escaped / by using // so trim the leading /
             data = data[1:]
@@ -206,12 +206,12 @@ class Server():
         # User sends a message to their room
         return self.distribute(data, [client.room], client)
 
-    def distribute(self, data, rooms, sender=None, except_users=[]):
+    def distribute(self, data, rooms, client=None, except_users=[]):
         """
         Description:
             Distributes data to all users in a given room
         Arguments:
-            A server object
+            A Server object
             Data to send
             A list of rooms to send to
             The client object who sent the data
@@ -236,9 +236,9 @@ class Server():
 
             for user in self.rooms[room]:
                 # User sends data
-                if sender is not None:
+                if client is not None:
                     if user not in except_users:
-                        self.send(f"{sender.username}: {data}", user.socket)
+                        self.send(f"{client.username}: {data}", user.socket)
 
                 # Server sends a notification
                 else:
@@ -247,150 +247,212 @@ class Server():
 
         return True
 
-    def server_command(self, input, client_socket):
+    # Server commands ####################################################
+
+    def server_command(self, input, client):
         """
         Description:
-            When a user precedes data with backslash, it is
-            interpreted as a command. This parses it.
+            When a user precedes data with backslash, it is interpreted
+            as a command. This function reroutes to the corresponding
+            command function
         Arguments:
             A Server object
             A command to be executed (including backslash)
+            The client object that issued the command
         Return Value:
             True if the command was carried out
             False if an error occurred
         """
-
-        # Get the client object
-        client = self.clients[client_socket]
 
         # Separate by whitespace to get arguments
         separated = input.split()
         cmd = separated[0]
         args = separated[1:]
 
-        # Command definitions
-        def rooms():
-            self.send("Active rooms:", client_socket)
-
-            for room in self.rooms:
-                self.send(f" * {room} ({len(self.rooms[room])})",
-                          client_socket)
-
-            self.send("End list.", client_socket)
-
-            return True
-
-        def join():
-            if len(args) == 0:
-                self.send(f"Usage: /join <room>", client_socket)
-
-                return False
-
-            if client.room is not None:
-                self.send(f"You are already in a room: {client.room}",
-                          client_socket)
-
-                return False
-
-            # Add the username to the rooms dictionary
-            # and the room to the client object
-            for a in args:
-                if a in self.rooms:
-                    self.rooms[a].append(client)
-                    client.room = a
-
-                    # Notify other users that a new user has joined
-                    self.distribute(f"{client.username} joined the room.", [a],
-                                    None, [client])
-
-                    # Notify the user that they joined the room
-                    self.send(f"Joined the room: {a}", client_socket)
-
-                    # Show the client who else is in the room
-                    return who()
-
-            # Room doesn't exist
-            self.send(f"No such room: {args[0]}", client_socket)
-
-            return False
-
-        def who():
-            # User not in a room
-            if client.room is None:
-                self.send("Not in a room.", client_socket)
-
-                return False
-
-            # Iterate through users in room
-            self.send(f"Users in: {client.room}", client_socket)
-
-            for user in self.rooms[client.room]:
-                if user.username == client.username:
-                    self.send(f" * {user.username} (you)", client_socket)
-                else:
-                    self.send(f" * {user.username}", client_socket)
-
-            self.send("End list.", client_socket)
-
-            return True
-
-        def leave():
-            # Notify other users that a user has left
-            self.distribute(f"{client.username} left the room.", [client.room],
-                            None, [client])
-
-            # Remove the userfrom the rooms dictionary
-            # and the room from the client object
-            if (client.room is not None):
-                self.send(f"Left the room: {client.room}", client_socket)
-                self.rooms[client.room].remove(client)
-                client.room = None
-
-                return True
-
-            # Client is not in a room
-            else:
-                self.send("Not in a room.", client_socket)
-
-                return False
-
-        def exit():
-            # Remove the client from any rooms
-            if client.room is not None:
-                if not leave():
-                    return False
-
-            # Then disconnect the client
-            self.send("Come again soon!", client_socket)
-            self.connection_terminated(client_socket)
-
-            return True
-
         # Command cases dictionary
-        commands = {"/rooms": rooms, "/r": rooms,
-                    "/join": join, "/j": join,
-                    "/who": who, "/w": who,
-                    "/leave": leave, "/l": leave,
-                    "/exit": exit, "/x": exit,
-                    "/quit": exit, "/q": exit}
+        commands = {"/rooms": self.show_rooms, "/r": self.show_rooms,
+                    "/join": self.join, "/j": self.join,
+                    "/who": self.who, "/w": self.who,
+                    "/leave": self.leave, "/l": self.leave,
+                    "/exit": self.client_exit, "/x": self.client_exit,
+                    "/quit": self.client_exit, "/q": self.client_exit}
 
         try:
-            return commands[cmd]()
+            return commands[cmd](args, client)
 
-        # # Incorrect command entered, show all valid commands
+        # Incorrect command entered, show all valid commands
         except KeyError as e:
-            self.send("Valid commands:", client_socket)
+            self.send("Valid commands:", client.socket)
             self.send("{:<6} - See active rooms.".format(" * /rooms"),
-                      client_socket)
+                      client.socket)
             self.send("{:<6} - Join a room.".format(" * /join"),
-                      client_socket)
+                      client.socket)
             self.send("{:<6} - See who is in the current room."
-                      .format(" * /who"), client_socket)
+                      .format(" * /who"), client.socket)
             self.send("{:<6} - Leave your current room.".format(" * /leave"),
-                      client_socket)
+                      client.socket)
             self.send("{:<6} - Close the chat client.".format(" * /exit"),
-                      client_socket)
+                      client.socket)
             self.send(" * To use backslash without a command: //",
-                      client_socket)
+                      client.socket)
 
             return False
+
+    def show_rooms(self, args, client):
+        """
+        Description:
+            Display the active rooms
+        Arguments:
+            A Server object
+            A list of arguments
+            The client socket that issued the command
+        Return Value:
+            True if the command was carried out
+            False if an error occurred
+        """
+
+        self.send("Active rooms:", client.socket)
+
+        for room in self.rooms:
+            self.send(f" * {room} ({len(self.rooms[room])})",
+                      client.socket)
+
+        self.send("End list.", client.socket)
+
+        return True
+
+    def join(self, args, client):
+        """
+        Description:
+            Allows a user to join a room
+            Adds the user to the rooms disctionary and adds the room
+            to the client object
+        Arguments:
+            A Server object
+            A list of arguments
+            The client socket that issued the command
+        Return Value:
+            True if the command was carried out
+            False if an error occurred
+        """
+
+        if len(args) == 0:
+            self.send(f"Usage: /join <room>", client.socket)
+
+            return False
+
+        if client.room is not None:
+            self.send(f"You are already in a room: {client.room}",
+                      client.socket)
+
+            return False
+
+        # Add the username to the rooms dictionary
+        # and the room to the client object
+        for a in args:
+            if a in self.rooms:
+                self.rooms[a].append(client)
+                client.room = a
+
+                # Notify other users that a new user has joined
+                self.distribute(f"{client.username} joined the room.", [a],
+                                None, [client])
+
+                # Notify the user that they joined the room
+                self.send(f"Joined the room: {a}", client.socket)
+
+                # Show the client who else is in the room
+                return self.who([], client)
+
+        # Room doesn't exist
+        self.send(f"No such room: {args[0]}", client.socket)
+
+        return False
+
+    def who(self, args, client):
+        """
+        Description:
+            Displays who is in the current room with the user
+        Arguments:
+            A Server object
+            A list of arguments
+            The client socket that issued the command
+        Return Value:
+            True if the command was carried out
+            False if an error occurred
+        """
+
+        # User not in a room
+        if client.room is None:
+            self.send("Not in a room.", client.socket)
+
+            return False
+
+        # Iterate through users in room
+        self.send(f"Users in: {client.room}", client.socket)
+
+        for user in self.rooms[client.room]:
+            if user.username == client.username:
+                self.send(f" * {user.username} (you)", client.socket)
+            else:
+                self.send(f" * {user.username}", client.socket)
+
+        self.send("End list.", client.socket)
+
+        return True
+
+    def leave(self, args, client):
+        """
+        Description:
+            Leaves the room that the user is currently in
+        Arguments:
+            A Server object
+            A list of arguments
+            The client socket that issued the command
+        Return Value:
+            True if the command was carried out
+            False if an error occurred
+        """
+
+        # Notify other users that a user has left
+        self.distribute(f"{client.username} left the room.", [client.room],
+                        None, [client])
+
+        # Remove the userfrom the rooms dictionary
+        # and the room from the client object
+        if (client.room is not None):
+            self.send(f"Left the room: {client.room}", client.socket)
+            self.rooms[client.room].remove(client)
+            client.room = None
+
+            return True
+
+        # Client is not in a room
+        else:
+            self.send("Not in a room.", client.socket)
+
+            return False
+
+    def client_exit(self, args, client):
+        """
+        Description:
+            Exits the chat client
+        Arguments:
+            A Server object
+            A list of arguments
+            The client socket that issued the command
+        Return Value:
+            True if the command was carried out
+            False if an error occurred
+        """
+
+        # Remove the client from any rooms
+        if client.room is not None:
+            if not self.leave([], client):
+                return False
+
+        # Then disconnect the client
+        self.send("Come again soon!", client.socket)
+        self.connection_terminated(client.socket)
+
+        return True
