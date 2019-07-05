@@ -61,7 +61,8 @@ class Server():
 
         # Exceptions indicate ungraceful client termanation
         except Exception as e:
-            self.connection_terminated(client_socket)
+            # self.connection_terminated(client_socket)
+            print(f"\nsend() error: {e}\n")
 
             return False
 
@@ -91,14 +92,19 @@ class Server():
             message = client_socket.recv(msg_len).decode('utf-8').strip()
 
             # Reroute to command function
-            if message[0] == '/' and message[1] != '/':
-                return self.server_command(message, client_socket)
+            if message[0] == '/':
+                if len(message) == 1 or message[1] != '/':
+                    return self.server_command(message, client_socket)
+
+                return message[1:]
 
             return message
 
         # Exceptions indicate ungraceful client termanation
         except Exception as e:
-            self.connection_terminated(client_socket)
+            # self.connection_terminated(client_socket)
+            print(f"\nreceive() error: {e}\n")
+
             return False
 
     def server_command(self, input, client_socket):
@@ -122,36 +128,69 @@ class Server():
         cmd = separated[0]
         args = separated[1:]
 
-        # Begin all command cases
-
-        if cmd == "/rooms" or cmd == "/r":
+        # Command definitions
+        def rooms():
             self.send("Active rooms:", client_socket)
 
             for room in self.rooms:
-                self.send(f" * {room} ({len(self.rooms[room])})", client_socket)
+                self.send(f" * {room} ({len(self.rooms[room])})",
+                          client_socket)
 
-            self.send("End active rooms", client_socket)
+            self.send("End list", client_socket)
 
             return True
 
-        elif cmd == "/join" or cmd == "/j":
-            if len(arg) > 1:
-                self.send(f"Too many arguments for /join (takes 1)",
+        def join():
+            if len(args) == 0:
+                self.send(f"Usage: /join <room>", client_socket)
+
+                return False
+
+            if client.room is not None:
+                self.send(f"You are already in a room: {client.room}",
                           client_socket)
 
-                return True
+                return False
 
             # Add the username to the rooms dictionary
             # and the room to the client object
-            self.rooms[args[0]].append(client.username)
-            client.room = args[0]
+            for a in args:
+                if args[0] in self.rooms:
+                    self.rooms[args[0]].append(client.username)
+                    client.room = args[0]
+
+                    return who()
+
+            # Room doesn't exist
+            self.send(f"No such room \"{args[0]}\"", client_socket)
+
+            return False
+
+        def who():
+            # User not in a room
+            if client.room is None:
+                self.send("You are not in a room", client_socket)
+
+                return False
+
+            # Iterate through users in room
+            self.send(f"Users in: {client.room}", client_socket)
+
+            for user in self.rooms[client.room]:
+                if user == client.username:
+                    self.send(f" * {user} (you)", client_socket)
+                else:
+                    self.send(f" * {user}", client_socket)
+
+            self.send("End list", client_socket)
 
             return True
 
-        elif cmd == "/leave" or cmd == "/l":
+        def leave():
             # Remove the username from the rooms dictionary
             # and the room from the client object
             if (client.room is not None):
+                self.send(f"Left room: {client.room}", client_socket)
                 self.rooms[client.room].remove(client.username)
                 client.room = None
 
@@ -161,11 +200,11 @@ class Server():
 
             return True
 
-        elif (cmd == "/exit" or cmd == "/x"
-              or cmd == "/quit" or cmd == "/q"):
+        def exit():
             # Remove the client from any rooms
             if client.room is not None:
-                leave()
+                if not leave():
+                    return False
 
             # Then disconnect the client
             self.send("Come again soon!", client_socket)
@@ -173,19 +212,34 @@ class Server():
 
             return True
 
+        # Command cases dictionary
+        commands = {"/rooms": rooms, "/r": rooms,
+                    "/join": join, "/j": join,
+                    "/who": who, "/w": who,
+                    "/leave": leave, "/l": leave,
+                    "/exit": exit, "/x": exit,
+                    "/quit": exit, "/q": exit}
+
+        try:
+            return commands[cmd]()
+
         # Incorrect command entered, show all valid commands
-        else:
+        except KeyError as e:
             self.send("Valid commands:", client_socket)
             self.send("{:<6} - See active rooms".format(" * /rooms"),
                       client_socket)
             self.send("{:<6} - Join a room".format(" * /join"),
                       client_socket)
+            self.send("{:<6} - See who is in the current room"
+                      .format(" * /who"), client_socket)
             self.send("{:<6} - Leave your current room".format(" * /leave"),
                       client_socket)
             self.send("{:<6} - Close your chat client".format(" * /exit"),
                       client_socket)
-            self.send(" * To use backslash without a command, type //",
+            self.send(" * To use backslash without a command: //",
                       client_socket)
+
+            return False
 
     def initialize_user(self, client_socket):
         """
