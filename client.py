@@ -97,5 +97,5 @@ class Client():
         Return Value:
             None
         """
-        print("<= Connection terminated by the server")
+        print("<= Connection terminated by the server.")
         sys.exit()

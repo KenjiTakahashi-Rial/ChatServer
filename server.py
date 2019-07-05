@@ -40,22 +40,22 @@ class Server():
                 rooms_str +
                 header_str)
 
-    def send(self, message, client_socket):
+    def send(self, data, client_socket):
         """
         Description:
-            Handles sending a message to a client
+            Handles sending a data to a client
         Arguments:
             A Server object
-            A message to send
-            A client socket to send a message to
+            Data to send
+            A client socket to send a data to
         Return Value:
-            True if the message sent successfully
+            True if the data sent successfully
             False if an error occurred
         """
 
         try:
-            header = f"{len(message):<{self.header_length}}"
-            client_socket.send((header + message).encode('utf-8'))
+            header = f"{len(data):<{self.header_length}}"
+            client_socket.send((header + data).encode('utf-8'))
 
             return True
 
@@ -69,12 +69,12 @@ class Server():
     def receive(self, client_socket):
         """
         Description:
-            Handles receiving a message from a client
+            Handles receiving a data from a client
         Arguments:
             A Server object
-            A client socket to receive a message from
+            A client socket to receive a data from
         Return Value:
-            The message if it was received successfully
+            The data if it was received successfully
             True if a command was run successfully
             False if a connection was terminated or an error occurred
         """
@@ -89,16 +89,9 @@ class Server():
                 return False
 
             msg_len = int(header.decode('utf-8').strip())
-            message = client_socket.recv(msg_len).decode('utf-8').strip()
+            data = client_socket.recv(msg_len).decode('utf-8').strip()
 
-            # Reroute to command function
-            if message[0] == '/':
-                if len(message) == 1 or message[1] != '/':
-                    return self.server_command(message, client_socket)
-
-                return message[1:]
-
-            return message
+            return data
 
         # Exceptions indicate ungraceful client termanation
         except Exception as e:
@@ -107,10 +100,51 @@ class Server():
 
             return False
 
+    def distribute(self, data, rooms, sender=None, send_self=False):
+        """
+        Description:
+            Distributes data to all users in a given room
+        Arguments:
+            A server object
+            Data to send
+            A list of rooms to send to
+            The client object who sent the data
+            A boolean indicating if the data should also be sent to
+            the original sender as well
+        Return Value:
+            True if the data was distributed
+            False if an error occurred
+        """
+
+        # No leading or trailing whitespace
+        data = data.strip()
+
+        # Don't send blank data
+        # Must have a room to send to
+        if len(data) == 0 or len(rooms) == 0:
+            return False
+
+        for room in rooms:
+            # Some kind of error
+            if room is None:
+                return False
+
+            for user in self.rooms[room]:
+                # User sends data
+                if sender is not None:
+                    if send_self or user.username != sender.username:
+                        self.send(f"{sender.username}: {data}", user.socket)
+
+                # Server sends a notification
+                else:
+                    self.send(data, user.socket)
+
+        return True
+
     def server_command(self, input, client_socket):
         """
         Description:
-            When a user precedes a message with backslash, it is
+            When a user precedes data with backslash, it is
             interpreted as a command. This parses it.
         Arguments:
             A Server object
@@ -127,6 +161,8 @@ class Server():
         separated = input.split()
         cmd = separated[0]
         args = separated[1:]
+        print(f"cmd: {cmd}")
+        print(f"args: {args}")
 
         # Command definitions
         def rooms():
@@ -136,7 +172,7 @@ class Server():
                 self.send(f" * {room} ({len(self.rooms[room])})",
                           client_socket)
 
-            self.send("End list", client_socket)
+            self.send("End list.", client_socket)
 
             return True
 
@@ -160,10 +196,7 @@ class Server():
                     client.room = a
 
                     # Notify other users that a new user has joined
-                    for user in self.rooms[a]:
-                        if user.username != client.username:
-                            self.send(f"{client.username} joined the room",
-                                      user.socket)
+                    self.distribute(f"{client.username} joined the room.", [a])
 
                     # Notify the user that they joined the room
                     self.send(f"Joined the room: {a}", client_socket)
@@ -172,14 +205,14 @@ class Server():
                     return who()
 
             # Room doesn't exist
-            self.send(f"No such room \"{args[0]}\"", client_socket)
+            self.send(f"No such room: {args[0]}", client_socket)
 
             return False
 
         def who():
             # User not in a room
             if client.room is None:
-                self.send("Not in a room", client_socket)
+                self.send("Not in a room.", client_socket)
 
                 return False
 
@@ -187,21 +220,18 @@ class Server():
             self.send(f"Users in: {client.room}", client_socket)
 
             for user in self.rooms[client.room]:
-                if user == client.username:
+                if user.username == client.username:
                     self.send(f" * {user.username} (you)", client_socket)
                 else:
                     self.send(f" * {user.username}", client_socket)
 
-            self.send("End list", client_socket)
+            self.send("End list.", client_socket)
 
             return True
 
         def leave():
             # Notify other users that a user has left
-            for user in self.rooms[client.room]:
-                if user.username != client.username:
-                    self.send(f"{client.username} left the room",
-                              user.socket)
+            self.distribute(f"{client.username} left the room.", client.room)
 
             # Remove the userfrom the rooms dictionary
             # and the room from the client object
@@ -214,7 +244,7 @@ class Server():
 
             # Client is not in a room
             else:
-                self.send("Not in a room", client_socket)
+                self.send("Not in a room.", client_socket)
 
                 return False
 
@@ -244,20 +274,55 @@ class Server():
         # Incorrect command entered, show all valid commands
         except KeyError as e:
             self.send("Valid commands:", client_socket)
-            self.send("{:<6} - See active rooms".format(" * /rooms"),
+            self.send("{:<6} - See active rooms.".format(" * /rooms"),
                       client_socket)
-            self.send("{:<6} - Join a room".format(" * /join"),
+            self.send("{:<6} - Join a room.".format(" * /join"),
                       client_socket)
-            self.send("{:<6} - See who is in the current room"
+            self.send("{:<6} - See who is in the current room."
                       .format(" * /who"), client_socket)
-            self.send("{:<6} - Leave your current room".format(" * /leave"),
+            self.send("{:<6} - Leave your current room.".format(" * /leave"),
                       client_socket)
-            self.send("{:<6} - Close your chat client".format(" * /exit"),
+            self.send("{:<6} - Close your chat client.".format(" * /exit"),
                       client_socket)
             self.send(" * To use backslash without a command: //",
                       client_socket)
 
             return False
+
+    def process(self, data, client_socket):
+        """
+        Description:
+            Checks whether the received data is a command or data to
+            send and carries out the appropriate functions
+        Arguments:
+            A server object
+            String of data to process
+            The client socket the data originated from
+        Return Value:
+            True if the data was processed successfully
+            False if an error occurred
+        """
+
+        client = self.clients[client_socket]
+
+        # Reroute to command function
+        if data[0] == '/':
+            if len(data) == 1 or data[1] != '/':
+                return self.server_command(data, client_socket)
+
+            # User escaped / by using // so trim the leading /
+            data = data[1:]
+
+        # Client is not in a room
+        if client.room is None:
+            self.send("Message not sent - not in a room. " +
+                      "Type /help for a list of commands.", client_socket)
+
+            return False
+
+        # Normal data distribution
+        # User sends a message to their room
+        return self.distribute(data, [client.room], client, True)
 
     def initialize_user(self, client_socket):
         """
