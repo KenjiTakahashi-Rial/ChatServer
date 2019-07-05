@@ -22,7 +22,7 @@ class Server():
         self.usernames = []
 
         # A dictionary with the clients of the room as the key
-        # and a list of users in the room as a value
+        # and a list of client objects in the room as a value
         self.rooms = rooms
 
         self.header_length = header_length
@@ -155,10 +155,20 @@ class Server():
             # Add the username to the rooms dictionary
             # and the room to the client object
             for a in args:
-                if args[0] in self.rooms:
-                    self.rooms[args[0]].append(client.username)
-                    client.room = args[0]
+                if a in self.rooms:
+                    self.rooms[a].append(client)
+                    client.room = a
 
+                    # Notify other users that a new user has joined
+                    for user in self.rooms[a]:
+                        if user.username != client.username:
+                            self.send(f"{client.username} joined the room",
+                                      user.socket)
+
+                    # Notify the user that they joined the room
+                    self.send(f"Joined the room: {a}", client_socket)
+
+                    # Show the client who else is in the room
                     return who()
 
             # Room doesn't exist
@@ -169,7 +179,7 @@ class Server():
         def who():
             # User not in a room
             if client.room is None:
-                self.send("You are not in a room", client_socket)
+                self.send("Not in a room", client_socket)
 
                 return False
 
@@ -178,27 +188,35 @@ class Server():
 
             for user in self.rooms[client.room]:
                 if user == client.username:
-                    self.send(f" * {user} (you)", client_socket)
+                    self.send(f" * {user.username} (you)", client_socket)
                 else:
-                    self.send(f" * {user}", client_socket)
+                    self.send(f" * {user.username}", client_socket)
 
             self.send("End list", client_socket)
 
             return True
 
         def leave():
-            # Remove the username from the rooms dictionary
+            # Notify other users that a user has left
+            for user in self.rooms[client.room]:
+                if user.username != client.username:
+                    self.send(f"{client.username} left the room",
+                              user.socket)
+
+            # Remove the userfrom the rooms dictionary
             # and the room from the client object
             if (client.room is not None):
-                self.send(f"Left room: {client.room}", client_socket)
-                self.rooms[client.room].remove(client.username)
+                self.send(f"Left the room: {client.room}", client_socket)
+                self.rooms[client.room].remove(client)
                 client.room = None
+
+                return True
 
             # Client is not in a room
             else:
-                self.send("You are not currently in a room", client_socket)
+                self.send("Not in a room", client_socket)
 
-            return True
+                return False
 
         def exit():
             # Remove the client from any rooms
