@@ -59,9 +59,8 @@ class Server():
 
             return True
 
-        # Exceptions indicate ungraceful client termanation
+        # Catch and display exceptions without crashing
         except Exception as e:
-            # self.connection_terminated(client_socket)
             print(f"\nsend() error: {e}\n")
 
             return False
@@ -93,12 +92,119 @@ class Server():
 
             return data
 
-        # Exceptions indicate ungraceful client termanation
+        # Catch and display exceptions without crashing
         except Exception as e:
-            # self.connection_terminated(client_socket)
             print(f"\nreceive() error: {e}\n")
 
             return False
+
+    def initialize_user(self, client_socket):
+        """
+        Description:
+            Gets the client data and stores it in the server
+        Agruments:
+            A Server object
+            A client socket to initialize
+            The client's address
+        Return Value:
+            A new client object
+            False if connection was terminated or an error occurred
+        """
+
+        self.send("Welcome to the GungHo test chat server", client_socket)
+
+        # Get the desired username
+        while True:
+            self.send("Username?: ", client_socket)
+            username = self.receive(client_socket)
+
+            # Connection terminated before name given
+            if not username:
+                return False
+
+            # If username is taken, continue asking
+            if username in self.usernames:
+                self.send(f"Sorry, {username} is taken", client_socket)
+                continue
+
+            break
+
+        # New client object
+        new_client = client.Client(client_socket, username, self.header_length)
+
+        # Add user data to the server
+        self.sockets.append(client_socket)
+        self.usernames.append(username)
+        self.clients[client_socket] = new_client
+
+        self.send(f"Welcome, {username}!", client_socket)
+
+        return new_client
+
+    def connection_terminated(self, client_socket):
+        """
+        Description:
+            Prints a message that a client terminated their connection and
+            removes the client from the server
+        Arguments:
+            A Server object
+            A client socket whos connection was or is to be terminated
+        Return Value:
+            None
+        """
+
+        if client_socket in self.clients:
+            ex_client = self.clients[client_socket]
+
+            print(f"\nConnection {ex_client.address} terminated by client " +
+                  f"{ex_client.username}\n")
+
+            self.sockets.remove(ex_client.socket)
+            self.usernames.remove(ex_client.username)
+            del ex_client
+
+        else:
+            str_address = (f"{client_socket.getsockname()[0]}:" +
+                           f"{client_socket.getsockname()[1]}")
+
+            print(f"\nConnection {str_address} terminated by unnamed client\n")
+
+        client_socket.close()
+
+    def process(self, data, client_socket):
+        """
+        Description:
+            Checks whether the received data is a command or data to
+            send and carries out the appropriate functions
+        Arguments:
+            A server object
+            String of data to process
+            The client socket the data originated from
+        Return Value:
+            True if the data was processed successfully
+            False if an error occurred
+        """
+
+        client = self.clients[client_socket]
+
+        # Reroute to command function
+        if data[0] == '/':
+            if len(data) == 1 or data[1] != '/':
+                return self.server_command(data, client_socket)
+
+            # User escaped / by using // so trim the leading /
+            data = data[1:]
+
+        # Client is not in a room
+        if client.room is None:
+            self.send("Message not sent - not in a room. " +
+                      "Type /help for a list of commands.", client_socket)
+
+            return False
+
+        # Normal data distribution
+        # User sends a message to their room
+        return self.distribute(data, [client.room], client)
 
     def distribute(self, data, rooms, sender=None, except_users=[]):
         """
@@ -288,111 +394,3 @@ class Server():
                       client_socket)
 
             return False
-
-    def process(self, data, client_socket):
-        """
-        Description:
-            Checks whether the received data is a command or data to
-            send and carries out the appropriate functions
-        Arguments:
-            A server object
-            String of data to process
-            The client socket the data originated from
-        Return Value:
-            True if the data was processed successfully
-            False if an error occurred
-        """
-
-        client = self.clients[client_socket]
-
-        # Reroute to command function
-        if data[0] == '/':
-            if len(data) == 1 or data[1] != '/':
-                return self.server_command(data, client_socket)
-
-            # User escaped / by using // so trim the leading /
-            data = data[1:]
-
-        # Client is not in a room
-        if client.room is None:
-            self.send("Message not sent - not in a room. " +
-                      "Type /help for a list of commands.", client_socket)
-
-            return False
-
-        # Normal data distribution
-        # User sends a message to their room
-        return self.distribute(data, [client.room], client)
-
-    def initialize_user(self, client_socket):
-        """
-        Description:
-            Gets the client data and stores it in the server
-        Agruments:
-            A Server object
-            A client socket to initialize
-            The client's address
-        Return Value:
-            A new client object
-            False if connection was terminated or an error occurred
-        """
-
-        self.send("Welcome to the GungHo test chat server", client_socket)
-
-        # Get the desired username
-        while True:
-            self.send("Username?: ", client_socket)
-            username = self.receive(client_socket)
-
-            # Connection terminated before name given
-            if not username:
-                return False
-
-            # If username is taken, continue asking
-            if username in self.usernames:
-                self.send(f"Sorry, {username} is taken", client_socket)
-                continue
-
-            break
-
-        # New client object
-        new_client = client.Client(client_socket, username, self.header_length)
-
-        # Add user data to the server
-        self.sockets.append(client_socket)
-        self.usernames.append(username)
-        self.clients[client_socket] = new_client
-
-        self.send(f"Welcome, {username}!", client_socket)
-
-        return new_client
-
-    def connection_terminated(self, client_socket):
-        """
-        Description:
-            Prints a message that a client terminated their connection and
-            removes the client from the server
-        Arguments:
-            A Server object
-            A client socket whos connection was or is to be terminated
-        Return Value:
-            None
-        """
-
-        if client_socket in self.clients:
-            ex_client = self.clients[client_socket]
-
-            print(f"\nConnection {ex_client.address} terminated by client " +
-                  f"{ex_client.username}\n")
-
-            self.sockets.remove(ex_client.socket)
-            self.usernames.remove(ex_client.username)
-            del ex_client
-
-        else:
-            str_address = (f"{client_socket.getsockname()[0]}:" +
-                           f"{client_socket.getsockname()[1]}")
-
-            print(f"\nConnection {str_address} terminated by unnamed client\n")
-
-        client_socket.close()
