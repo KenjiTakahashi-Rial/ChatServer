@@ -1,3 +1,3 @@
-web: python run_client.py
+web: python run_server.py
 
-server: python run_server.py
+client: python run_client.py
