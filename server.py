@@ -11,6 +11,13 @@ import client
 
 SOCKET_BUFFER = 4096
 
+# Do not print backspace, arrow keys, function keys,
+ILLEGAL_CHARS = ['\x08', '\x1b[A', '\x1b[B', '\x1b[C', '\x1b[D', '\x1bOP',
+                 '\x1bOQ', '\x1bOR', '\x1bOS', '\x1b[15~', '\x1b[17~',
+                 '\x1b[18~', '\x1b[19~', '\x1b[20~', '\x1b[21~', '\x1b[23~',
+                 '\x1b[24~]', '\x1b[2~', '\x1b[1~', '\x1b[5~', '\x7f',
+                 '\x1b[4~', '\x1b[6~', '\x1b[P']
+
 
 class Server():
 
@@ -215,6 +222,7 @@ class Server():
         print(f"\nClient at {client.address} set username to " +
               f"{client.username}\n")
 
+        print(repr(username))
         return True
 
     def process(self, data, client):
