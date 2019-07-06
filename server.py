@@ -4,15 +4,17 @@
 # by Kenji Takahashi-Rial               #
 #########################################
 
-import socket
+import socket as socket_module
 import sys
 
 import client
 
+SOCKET_BUFFER = 4096
+
 
 class Server():
 
-    def __init__(self, server_socket, rooms={}, header_length=8):
+    def __init__(self, server_socket, rooms={}):
         self.socket = server_socket
         self.sockets = [server_socket]
 
@@ -25,14 +27,11 @@ class Server():
         # and a list of client objects in the room as a value
         self.rooms = rooms
 
-        self.header_length = header_length
-
     def __str__(self):
         server_socket_str = f"server socket: {self.socket}\n\n"
         sockets_str = f"sockets: {self.sockets}\n\n"
         clients_str = f"clients: {self.clients}\n\n"
         rooms_str = f"rooms: {self.rooms}\n\n"
-        header_str = f"header length: {self.header_length}\n\n"
 
         return (server_socket_str +
                 sockets_str +
@@ -40,22 +39,25 @@ class Server():
                 rooms_str +
                 header_str)
 
-    def send(self, data, client_socket):
+    def send(self, data, client, prompt=True):
         """
         Description:
             Handles sending a data to a client
         Arguments:
             A Server object
             Data to send
-            A client socket to send a data to
+            A client object to send a data to
         Return Value:
             True if the data sent successfully
             False if an error occurred
         """
 
         try:
-            header = f"{len(data):<{self.header_length}}"
-            client_socket.send((header + data).encode('utf-8'))
+            # Send the data
+            client.socket.send((f"<= {data}\r\n").encode('utf-8'))
+
+            if prompt:
+                client.socket.send("=> ".encode('utf-8'))
 
             return True
 
@@ -65,32 +67,52 @@ class Server():
 
             return False
 
-    def receive(self, client_socket):
+    def receive(self, client):
         """
         Description:
             Handles receiving a data from a client
         Arguments:
             A Server object
-            A client socket to receive a data from
+            A client object to receive a data from
         Return Value:
-            The data if it was received successfully
-            True if a command was run successfully
-            False if a connection was terminated or an error occurred
+            True if the client typed a message and hit enter
+            None if the client hit enter on a blank message or has not
+            hit enter yet
+            False if an error occurred
         """
 
         try:
-            header = client_socket.recv(self.header_length)
+            data = client.socket.recv(SOCKET_BUFFER).decode('utf-8')
 
-            # If connection was terminated, there is no header
-            if len(header) == 0:
-                self.connection_terminated(client_socket)
+            client.typing += data
 
-                return False
+            # The user hit enter
+            if client.typing[-1] == '\n':
+                client.typing = client.typing[:-1]
 
-            msg_len = int(header.decode('utf-8').strip())
-            data = client_socket.recv(msg_len).decode('utf-8').strip()
+                # For Windows remove the carriage return
+                if client.typing[-1] == '\r':
+                    client.typing = client.typing[:-1]
 
-            return data
+                    # Check for empty data
+                    if len(client.typing) == 0:
+                        client.socket.send("=> ".encode('utf-8'))
+
+                        return None
+
+                # Check for empty data
+                if len(client.typing) == 0:
+                    client.socket.send("\r\n=> ".encode('utf-8'))
+
+                    return None
+
+                # Non-empty data
+                message = client.typing
+                client.typing = ""
+
+                return message
+
+            return None
 
         # Catch and display exceptions without crashing
         except Exception as e:
@@ -98,94 +120,120 @@ class Server():
 
             return False
 
-    def initialize_user(self, client_socket):
-        """
-        Description:
-            Gets the client data and stores it in the server
-        Agruments:
-            A Server object
-            A client socket to initialize
-            The client's address
-        Return Value:
-            A new client object
-            False if connection was terminated or an error occurred
-        """
-
-        self.send("Welcome to the GungHo test chat server", client_socket)
-
-        # Get the desired username
-        while True:
-            self.send("Username?: ", client_socket)
-            username = self.receive(client_socket)
-
-            # Connection terminated before name given
-            if not username:
-                return False
-
-            # If username is taken, continue asking
-            if username in self.usernames:
-                self.send(f"Sorry, {username} is taken", client_socket)
-                continue
-
-            break
-
-        # New client object
-        new_client = client.Client(client_socket, username, self.header_length)
-
-        # Add user data to the server
-        self.sockets.append(client_socket)
-        self.usernames.append(username)
-        self.clients[client_socket] = new_client
-
-        self.send(f"Welcome, {username}!", client_socket)
-
-        return new_client
-
-    def connection_terminated(self, client_socket):
+    def connection_terminated(self, client):
         """
         Description:
             Prints a message that a client terminated their connection and
             removes the client from the server
         Arguments:
             A Server object
-            A client socket whos connection was or is to be terminated
+            A client whose connection was or is to be terminated
         Return Value:
             None
         """
 
-        if client_socket in self.clients:
-            ex_client = self.clients[client_socket]
+        if client.has_name():
+            print(f"\nConnection {client.address} terminated by client " +
+                  f"{client.username}\n")
 
-            print(f"\nConnection {ex_client.address} terminated by client " +
-                  f"{ex_client.username}\n")
-
-            self.sockets.remove(ex_client.socket)
-            self.usernames.remove(ex_client.username)
-            del ex_client
+            self.usernames.remove(client.username)
 
         else:
-            str_address = (f"{client_socket.getsockname()[0]}:" +
-                           f"{client_socket.getsockname()[1]}")
-
             print(f"\nConnection {str_address} terminated by unnamed client\n")
 
-        client_socket.close()
+        self.sockets.remove(client.socket)
 
-    def process(self, data, client_socket):
+        client.socket.close()
+
+        del self.clients[client.socket]
+
+    def initialize_client(self, client_socket):
         """
         Description:
-            Checks whether the received data is a command or data to
-            send and carries out the appropriate functions
+            Gets the client data and stores it in the server
+        Agruments:
+            A Server object
+            A client socket to initialize
+        Return Value:
+            A new client object
+        """
+
+        # New client object
+        new_client = client.Client(client_socket)
+
+        # Add user data to the server
+        self.sockets.append(client_socket)
+        self.clients[client_socket] = new_client
+
+        # Prompt the user to enter a username
+        self.send("Username?: ", new_client)
+
+        print(f"\nNew connection: {new_client.address}\n")
+
+        return new_client
+
+    def set_username(self, client, username):
+        """
+        Descripton:
+            Set the username for a client
+            Cannot be empty, contain spaces, or identical to another username
+        Arguments:
+            A server object
+            A client object to set the username of
+            A proposed username
+        Return Value:
+            True if the username was set successfully
+            False if the username is invalid or an error occurred
+        """
+
+        # Check username is not empty
+        if len(username) == 0:
+            self.send("Username cannot be empty", client, False)
+            self.send("Username?: ", client)
+
+            return False
+
+        # Check username does not contain spaces
+        if any([c.isspace() for c in username]):
+            self.send("Username cannot contain spaces", client, False)
+            self.send("Username?: ", client)
+
+            return False
+
+        # Check username is not taken
+        if username in self.usernames:
+            self.send(f"Sorry, {username} is taken", client, False)
+            self.send("Username?: ", client)
+
+            return False
+
+        client.username = username
+        self.usernames.append(username)
+
+        self.send(f"Welcome, {username}!", client)
+
+        print(f"\nClient at {client.address} set username to " +
+              f"{client.username}\n")
+
+        return True
+
+    def process(self, data, client):
+        """
+        Description:
+            Checks the sender of the data and carries out the
+            appropriate functions whether it is a command or a message
         Arguments:
             A Server object
-            String of data to process
+            A string of data to process
             The client socket the data originated from
         Return Value:
             True if the data was processed successfully
             False if an error occurred
         """
 
-        client = self.clients[client_socket]
+        # Client has not set username yet
+        if not client.has_name():
+            return self.set_username(client, data)
 
         # Reroute to command function
         if data[0] == '/':
@@ -198,7 +246,7 @@ class Server():
         # Client is not in a room
         if client.room is None:
             self.send("Message not sent - not in a room. " +
-                      "Type /help for a list of commands.", client_socket)
+                      "Type /help for a list of commands.", client)
 
             return False
 
@@ -238,12 +286,12 @@ class Server():
                 # User sends data
                 if client is not None:
                     if user not in except_users:
-                        self.send(f"{client.username}: {data}", user.socket)
+                        self.send(f"{client.username}: {data}", user)
 
                 # Server sends a notification
                 else:
                     if user not in except_users:
-                        self.send(data, user.socket)
+                        self.send(data, user)
 
         return True
 
@@ -282,19 +330,19 @@ class Server():
 
         # Incorrect command entered, show all valid commands
         except KeyError as e:
-            self.send("Valid commands:", client.socket)
-            self.send("{:<6} - See active rooms.".format(" * /rooms"),
-                      client.socket)
-            self.send("{:<6} - Join a room.".format(" * /join"),
-                      client.socket)
+            self.send("Valid commands:", client, False)
+            self.send("{:<6} - See active rooms.".format(" * /rooms"), client,
+                      False)
+            self.send("{:<6} - Join a room.".format(" * /join"), client, False)
             self.send("{:<6} - See who is in the current room."
-                      .format(" * /who"), client.socket)
+                      .format(" * /who"), client, False)
             self.send("{:<6} - Leave your current room.".format(" * /leave"),
-                      client.socket)
+                      client, False)
             self.send("{:<6} - Close the chat client.".format(" * /exit"),
-                      client.socket)
-            self.send(" * To use backslash without a command: //",
-                      client.socket)
+                      client, False)
+            self.send(" * To use backslash without a command: //", client,
+                      False)
+            self.send("End list.", client)
 
             return False
 
@@ -311,13 +359,12 @@ class Server():
             False if an error occurred
         """
 
-        self.send("Active rooms:", client.socket)
+        self.send("Active rooms:", client, False)
 
         for room in self.rooms:
-            self.send(f" * {room} ({len(self.rooms[room])})",
-                      client.socket)
+            self.send(f" * {room} ({len(self.rooms[room])})", client, False)
 
-        self.send("End list.", client.socket)
+        self.send("End list.", client)
 
         return True
 
@@ -337,13 +384,12 @@ class Server():
         """
 
         if len(args) == 0:
-            self.send(f"Usage: /join <room>", client.socket)
+            self.send(f"Usage: /join <room>", client)
 
             return False
 
         if client.room is not None:
-            self.send(f"You are already in a room: {client.room}",
-                      client.socket)
+            self.send(f"You are already in a room: {client.room}", client)
 
             return False
 
@@ -359,13 +405,13 @@ class Server():
                                 None, [client])
 
                 # Notify the user that they joined the room
-                self.send(f"Joined the room: {a}", client.socket)
+                self.send(f"Joined the room: {a}", client, False)
 
                 # Show the client who else is in the room
                 return self.who([], client)
 
         # Room doesn't exist
-        self.send(f"No such room: {args[0]}", client.socket)
+        self.send(f"No such room: {args[0]}", client)
 
         return False
 
@@ -384,24 +430,24 @@ class Server():
 
         # User not in a room
         if client.room is None:
-            self.send("Not in a room.", client.socket)
+            self.send("Not in a room.", client)
 
             return False
 
         # Iterate through users in room
-        self.send(f"Users in: {client.room}", client.socket)
+        self.send(f"Users in: {client.room}", client, False)
 
         for user in self.rooms[client.room]:
             if user.username == client.username:
-                self.send(f" * {user.username} (you)", client.socket)
+                self.send(f" * {user.username} (you)", client, False)
             else:
-                self.send(f" * {user.username}", client.socket)
+                self.send(f" * {user.username}", client, False)
 
-        self.send("End list.", client.socket)
+        self.send("End list.", client)
 
         return True
 
-    def leave(self, args, client):
+    def leave(self, args, client, exit=False):
         """
         Description:
             Leaves the room that the user is currently in
@@ -421,7 +467,10 @@ class Server():
         # Remove the userfrom the rooms dictionary
         # and the room from the client object
         if (client.room is not None):
-            self.send(f"Left the room: {client.room}", client.socket)
+            # Don't print the leave message when exiting
+            if not exit:
+                self.send(f"Left the room: {client.room}", client)
+
             self.rooms[client.room].remove(client)
             client.room = None
 
@@ -429,14 +478,14 @@ class Server():
 
         # Client is not in a room
         else:
-            self.send("Not in a room.", client.socket)
+            self.send("Not in a room.", client)
 
             return False
 
     def client_exit(self, args, client):
         """
         Description:
-            Exits the chat client
+            Disconnects the client from the server
         Arguments:
             A Server object
             A list of arguments
@@ -448,11 +497,11 @@ class Server():
 
         # Remove the client from any rooms
         if client.room is not None:
-            if not self.leave([], client):
+            if not self.leave([], client, True):
                 return False
 
         # Then disconnect the client
-        self.send("Come again soon!", client.socket)
-        self.connection_terminated(client.socket)
+        self.send("Come again soon!", client, False)
+        self.connection_terminated(client)
 
         return True

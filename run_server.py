@@ -17,8 +17,6 @@ import server
 IP_ADDRESS = socket.gethostbyname(socket.gethostname())
 PORT = int(os.environ.get("PORT", 1081))
 
-HEADER_LENGTH = 8
-
 # Set up the server socket and start listening
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -33,7 +31,7 @@ print(f"\nListening for connections on {IP_ADDRESS}:{PORT}...\n")
 rooms = {"chat": [], "hottub": [], "PAD": [], "anime": []}
 
 # Create the server object
-chat_server = server.Server(server_socket, rooms, HEADER_LENGTH)
+chat_server = server.Server(server_socket, rooms)
 
 
 # MAIN SERVER LOOP ##################################################
@@ -49,19 +47,21 @@ while True:
         if ready_socket == chat_server.socket:
             client_socket, client_address = chat_server.socket.accept()
 
-            new_user = chat_server.initialize_user(client_socket)
+            client_socket.send(f"<= Welcome to the GungHo chat server\r\n"
+                               .encode('utf-8'))
 
-            if new_user is not False:
-                print(f"\nNew connection: {new_user.address}, " +
-                      f"Username: {new_user.username}\n")
+            chat_server.initialize_client(client_socket)
 
-        # Get data and process it
         else:
-            data = chat_server.receive(ready_socket)
+            # Get client object
+            client = chat_server.clients[ready_socket]
 
-            if type(data) is not bool:
-                chat_server.process(data, ready_socket)
+            # Get data and process it
+            data = chat_server.receive(client)
+
+            if data is not None and data is not False:
+                chat_server.process(data, client)
 
     # Error handling
     for ready_socket in error_sockets:
-        chat_server.connection_terminated(ready_socket)
+        chat_server.connection_terminated(chat_server.clients[ready_socket])
