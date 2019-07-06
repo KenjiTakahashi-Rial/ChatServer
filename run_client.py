@@ -4,6 +4,7 @@
 # by Kenji Takahashi-Rial               #
 #########################################
 
+import os
 import socket
 import sys
 
@@ -13,8 +14,8 @@ import client
 # INITIAL SETUP ####################################################
 
 
-IP_ADDRESS = socket.gethostname()
-PORT = 1081
+IP_ADDRESS = socket.gethostbyname(socket.gethostname())
+PORT = int(os.environ.get("PORT", 1081))
 
 HEADER_LENGTH = 8
 
