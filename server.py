@@ -28,7 +28,10 @@ class Server():
         # A dictionary with the client socket as the key
         # and the client object as the value
         self.clients = {}
-        self.usernames = []
+
+        # A dictionary with the client username as the key
+        # and the client object as the value
+        self.usernames = {}
 
         # A dictionary with the clients of the room as the key
         # and a list of client objects in the room as a value
@@ -143,7 +146,7 @@ class Server():
             print(f"\nConnection {client.address} terminated by client " +
                   f"{client.username}\n")
 
-            self.usernames.remove(client.username)
+            del self.usernames[client.username]
 
         else:
             print(f"\nConnection {str_address} terminated by unnamed client\n")
@@ -215,14 +218,13 @@ class Server():
             return False
 
         client.username = username
-        self.usernames.append(username)
+        self.usernames[username] = client
 
         self.send(f"Welcome, {username}!", client)
 
         print(f"\nClient at {client.address} set username to " +
               f"{client.username}\n")
 
-        print(repr(username))
         return True
 
     def process(self, data, client):
@@ -233,7 +235,7 @@ class Server():
         Arguments:
             A Server object
             A string of data to process
-            The client socket the data originated from
+            The client object the data originated from
         Return Value:
             True if the data was processed successfully
             False if an error occurred
@@ -330,6 +332,7 @@ class Server():
                     "/join": self.join, "/j": self.join,
                     "/who": self.who, "/w": self.who,
                     "/leave": self.leave, "/l": self.leave,
+                    "/private": self.private, "/p": self.private,
                     "/exit": self.client_exit, "/x": self.client_exit,
                     "/quit": self.client_exit, "/q": self.client_exit}
 
@@ -338,19 +341,22 @@ class Server():
 
         # Incorrect command entered, show all valid commands
         except KeyError as e:
-            self.send("Valid commands:", client, False)
-            self.send("{:<6} - See active rooms.".format(" * /rooms"), client,
-                      False)
-            self.send("{:<6} - Join a room.".format(" * /join"), client, False)
-            self.send("{:<6} - See who is in the current room."
-                      .format(" * /who"), client, False)
-            self.send("{:<6} - Leave your current room.".format(" * /leave"),
-                      client, False)
-            self.send("{:<6} - Close the chat client.".format(" * /exit"),
-                      client, False)
-            self.send(" * To use backslash without a command: //", client,
-                      False)
-            self.send("End list.", client)
+            valid_commands = ("Valid commands:\n\r" +
+                              " * /rooms - See active rooms.\n\r" +
+                              " * /join <room> - Join a room. Default: " +
+                              "chat\n\r" +
+                              " * /who <room> - See who is in a room. " +
+                              "Default: current room \n\r" +
+                              " * /leave - Leave your current room.\n\r" +
+                              " * /private <user> <message> - Send a private " +
+                              "message.\n\r" +
+                              " * /quit - Disconnect from the server.\n\n\r" +
+                              " * To use backslash without a command: //\n\r" +
+                              " * Typing backslash with only the first " +
+                              "letter of a command works as well\n\r" +
+                              "End list.")
+
+            self.send(valid_commands, client)
 
             return False
 
@@ -361,7 +367,7 @@ class Server():
         Arguments:
             A Server object
             A list of arguments
-            The client socket that issued the command
+            The client object that issued the command
         Return Value:
             True if the command was carried out
             False if an error occurred
@@ -385,21 +391,19 @@ class Server():
         Arguments:
             A Server object
             A list of arguments
-            The client socket that issued the command
+            The client object that issued the command
         Return Value:
             True if the command was carried out
             False if an error occurred
         """
 
-        if len(args) == 0:
-            self.send(f"Usage: /join <room>", client)
-
-            return False
-
         if client.room is not None:
             self.send(f"You are already in a room: {client.room}", client)
 
             return False
+
+        if len(args) == 0:
+            args.append("chat")
 
         # Add the username to the rooms dictionary
         # and the room to the client object
@@ -430,7 +434,7 @@ class Server():
         Arguments:
             A Server object
             A list of arguments
-            The client socket that issued the command
+            The client object that issued the command
         Return Value:
             True if the command was carried out
             False if an error occurred
@@ -462,7 +466,7 @@ class Server():
         Arguments:
             A Server object
             A list of arguments
-            The client socket that issued the command
+            The client object that issued the command
         Return Value:
             True if the command was carried out
             False if an error occurred
@@ -490,6 +494,51 @@ class Server():
 
             return False
 
+    def private(self, args, client):
+        """
+        Description:
+            Sends a message to only the client and one other specified
+            user
+        Arguments:
+            A Server object
+            A list of arguments
+            The client object that issued the command
+        Return Value:
+            True if the command was carried out
+            False if an error occurred
+        """
+
+        if len(args) == 0:
+            return self.send("Usage: /private <user> <message>", client)
+
+        if args[0] == client.username:
+            self.send("Cannot send private message to yourself", client)
+
+            return False
+
+        try:
+            send_to = self.usernames[args[0]]
+
+        except KeyError as E:
+            self.send(f"User not found: {args[0]}", client)
+
+            return False
+
+        # No message to deliver, so do nothing
+        if len(args) == 1:
+            client.socket.send("=> ".encode('utf-8'))
+
+            return True
+
+        # Reconstruct message from args
+        message = " ".join(args[1:])
+
+        sent_to = self.send(f"{client.username} (private): {message}", send_to)
+        sent_from = self.send(f"{client.username} (private): {message}",
+                              client)
+
+        return sent_to and sent_from
+
     def client_exit(self, args, client):
         """
         Description:
@@ -497,7 +546,7 @@ class Server():
         Arguments:
             A Server object
             A list of arguments
-            The client socket that issued the command
+            The client object that issued the command
         Return Value:
             True if the command was carried out
             False if an error occurred
