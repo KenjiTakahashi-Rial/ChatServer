@@ -17,4 +17,19 @@ class Room():
         else:
             self.owner = client.username
 
+        # List of admin usernames
+        self.admins = []
+
+        # List of user objects
         self.users = []
+
+    def __str__(self):
+        name_str = f"name: {self.name}\n\n"
+        owner_str = f"owner: {self.owner}\n\n"
+        admins_str = f"admins: {self.admins}\n\n"
+        users_str = f"users: {self.users}\n\n"
+
+        return (name_str +
+                owner_str +
+                admins_str +
+                users_str)

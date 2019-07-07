@@ -23,5 +23,18 @@ class Client():
         # A buffer for a message before the client hits enter
         self.typing = ""
 
+    def __str__(self):
+        socket_str = f"socket: {self.socket}\n\n"
+        address_str = f"address: {self.address}\n\n"
+        username_str = f"username: {self.username}\n\n"
+        room_str = f"room: {self.room}\n\n"
+        typing_str = f"typing: {self.typing}\n\n"
+
+        return (socket_str +
+                address_str +
+                username_str +
+                room_str +
+                typing_str)
+
     def has_name(self):
         return self.username != ""
