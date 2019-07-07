@@ -120,8 +120,6 @@ def connection_terminated(self, client):
         print(f"\nConnection {client.address} terminated by client " +
               f"{client.username}\n")
 
-        del self.usernames[client.username]
-
     else:
         print(f"\nConnection {str_address} terminated by unnamed client\n")
 
@@ -202,7 +200,7 @@ def set_username(self, client, username):
               f"{client.username}\n")
 
     else:
-        self.send("Username?: ", new_client)
+        self.send("Username?: ", client)
 
     return no_errors
 

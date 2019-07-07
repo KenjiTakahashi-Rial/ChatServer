@@ -23,6 +23,9 @@ class Room():
         # List of client objects
         self.users = []
 
+        # List of banned usernames
+        self.banned = []
+
     def __str__(self):
         name_str = f"name: {self.name}\n\n"
         owner_str = f"owner: {self.owner}\n\n"

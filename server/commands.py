@@ -27,15 +27,21 @@ def show_rooms(self, args, client):
     for room in self.rooms:
         room_str = f" * {room} ({len(self.rooms[room].users)})"
 
+        # Get room object
+        room = self.rooms[room]
+
         # Tag room appropriately
-        if client.username in self.rooms[room].admins:
+        if client.username in room.admins:
             room_str += " (admin)"
 
-        if client.username == self.rooms[room].owner:
+        if client.username == room.owner:
             room_str += " (owner)"
 
-        if client.room == self.rooms[room]:
+        if client.room == room:
             room_str += " (current)"
+
+        if client.username in room.banned:
+            room_str += " (banned)"
 
         self.send(room_str, client)
 
@@ -72,34 +78,41 @@ def join(self, args, client):
 
         return False
 
+    if args[0] not in self.rooms:
+        self.send(f"Room does not exist: {args[0]}", client)
+
+        return False
+
+    # Get room object
+    room = self.rooms[args[0]]
+
+    if client.username in room.banned:
+        self.send(f"You are banned from the room: {args[0]}", client)
+
+        return False
+
     # Add the username to the rooms dictionary
     # and the room to the client object
-    if args[0] in self.rooms:
-        self.rooms[args[0]].users.append(client)
-        client.room = self.rooms[args[0]]
+    room.users.append(client)
+    client.room = room
 
-        # Tag user appropriately
-        join_user = client.username
-        if client.username == self.rooms[args[0]].owner:
-            join_user += " (owner)"
+    # Tag user appropriately
+    join_user = client.username
+    if client.username == room.owner:
+        join_user += " (owner)"
 
-        if client.username in self.rooms[args[0]].admins:
-            join_user += " (admin)"
+    if client.username in room.admins:
+        join_user += " (admin)"
 
-        # Notify other users that a new user has joined
-        self.distribute(f"{join_user} joined the room", [args[0]],
-                        None, [client])
+    # Notify other users that a new user has joined
+    self.distribute(f"{join_user} joined the room", [args[0]],
+                    None, [client])
 
-        # Notify the user that they joined the room
-        self.send(f"Joined the room: {args[0]}", client)
+    # Notify the user that they joined the room
+    self.send(f"Joined the room: {args[0]}", client)
 
-        # Show the client who else is in the room
-        return who(self, [], client)
-
-    # Room doesn't exist
-    self.send(f"Room does not exist: {args[0]}", client)
-
-    return False
+    # Show the client who else is in the room
+    return who(self, [], client)
 
 
 def who(self, args, client):
@@ -124,7 +137,6 @@ def who(self, args, client):
 
     # Default to current room
     if len(args) == 0:
-        # User not in a room
         if client.room is None:
             self.send("Not in a room", client)
 
@@ -379,6 +391,95 @@ def kick(self, args, client):
     return no_errors
 
 
+def ban(self, args, client):
+    """
+    Description:
+        Ban one or more users from a room
+        Must have adminship or ownership
+    Arguments:
+        A Server object
+        A list of arguments
+        The client object that issued the command
+    Return Value:
+        True if the command was carried out
+        False if an error occurred
+    """
+
+    if len(args) == 0:
+        self.send("Usage: /ban <user1> <user2> ...", client)
+
+        return False
+
+    if client.room is None:
+        self.send("Not in a room", client)
+
+        return False
+
+    # Check priviliges
+    if client.username != client.room.owner:
+        if client.username not in client.room.admins:
+            self.send("Insufficient priviliges to ban from: " +
+                      client.room, client)
+
+            return False
+
+    no_errors = True
+
+    for username in args:
+
+        if username not in self.usernames:
+            self.send(f"User does not exist: {username}", client)
+
+            no_errors = False
+            continue
+
+        # Get user object
+        user = self.usernames[username]
+
+        # Must be owner to ban admin
+        if username in client.room.admins:
+            if client.username != room.owner:
+                self.send("Insufficient priviliges to ban admin: " +
+                          f"{username}", client)
+
+                no_errors = False
+                continue
+
+        # Do not allow users to ban themselves
+        if username == client.username:
+            self.send("Cannot ban self from room", client)
+
+            no_errors = False
+            continue
+
+        # Owner cannot be banned
+        if username == client.room.owner:
+            self.send(f"Cannot ban owner from room: {client.room.owner}",
+                      client)
+
+            no_errors = False
+            continue
+
+        # Remove the user first
+        if user in client.room.users:
+            user.room = None
+            user.typing = ""
+            client.room.users.remove(user)
+
+        client.room.banned.append(user.username)
+
+        # Notify all parties that a user was banned
+        self.send(f"You were banned from a room: {client.room.name}",
+                  user)
+
+        self.send(f"Banned user: {username}", client)
+
+        self.distribute(f"{username} was banned from the room",
+                        [client.room.name], None, [client])
+
+    return no_errors
+
+
 def delete(self, args, client):
     """
     Description:
@@ -393,15 +494,13 @@ def delete(self, args, client):
         False if an error occurred
     """
 
-    if len(args) == 0:
-        self.send("Usage: /delete <name>", client)
-
-        return False
-
     if len(args) > 1:
         self.send("Room name cannot contain spaces", client)
 
         return False
+
+    if len(args) == 0:
+        args.append(client.room)
 
     if args[0] not in self.rooms:
         self.send(f"Room does not exist {args[0]}", client)
@@ -416,23 +515,14 @@ def delete(self, args, client):
     # Get the room object
     room = self.rooms[args[0]]
 
-    # Try to kick all users in the room except the owner
-    kick_args = []
+    print([user.username for user in room.users])
     for user in room.users:
+        print(user.username)
+        user.room = None
+        user.typing = ""
+
         if user.username != room.owner:
-            kick_args.append(user.username)
-
-    if len(kick_args) != 0:
-        if not kick(self, kick_args, client):
-            self.send(f"Failed to kick all users", client)
-
-        return False
-
-    # Lastly, remove self
-    if client.room == room:
-        client.room = None
-        client.typing = ""
-        room.users.remove(client)
+            self.send(f"The room was deleted: {room.name}", user)
 
     del self.rooms[args[0]]
 
@@ -466,6 +556,42 @@ def client_exit(self, args, client):
     return True
 
 
+# Command cases dictionary
+COMMANDS = {"/rooms": show_rooms, "/r": show_rooms,
+            "/join": join, "/j": join,
+            "/who": who, "/w": who,
+            "/leave": leave, "/l": leave,
+            "/private": private, "/p": private,
+            "/create": create, "/c": create,
+            "/kick": kick, "/k": kick,
+            "/ban": ban, "/b": ban,
+            "/delete": delete, "/d": delete,
+            "/exit": client_exit, "/x": client_exit,
+            "/quit": client_exit, "/q": client_exit}
+
+# Descriptions of the valid commands
+VALID_COMMANDS = ("Valid commands:\n\r" +
+                  " * /rooms - See active rooms\n\r" +
+                  " * /join <room> - Join a room\n\r" +
+                  " * /who <room> - See who is in a room. " +
+                  "Default: current room \n\r" +
+                  " * /leave - Leave your current room\n\r" +
+                  " * /private <user> <message> - Send a " +
+                  "private message\n\r" +
+                  " * /create <name> - Create a new room\n\r" +
+                  " * /kick <user1> <user2> ... - Kick user(s) " +
+                  "from your current room\n\r" +
+                  " * /ban <user1> <user2> ... - Ban user(s) " +
+                  "from your current room\n\r" +
+                  " * /delete <name> - Delete a room. " +
+                  "Default: current room\n\r" +
+                  " * /quit - Disconnect from the server\n\n\r" +
+                  " * To use backslash without a command: //\n\r" +
+                  " * Typing backslash with only the first " +
+                  "letter of a command works as well\n\r" +
+                  "End list")
+
+
 def command(self, input, client):
     """
     Description:
@@ -486,42 +612,11 @@ def command(self, input, client):
     cmd = separated[0]
     args = separated[1:]
 
-    # Command cases dictionary
-    commands = {"/rooms": show_rooms, "/r": show_rooms,
-                "/join": join, "/j": join,
-                "/who": who, "/w": who,
-                "/leave": leave, "/l": leave,
-                "/private": private, "/p": private,
-                "/create": create, "/c": create,
-                "/kick": kick, "/k": kick,
-                "/delete": delete, "/d": delete,
-                "/exit": client_exit, "/x": client_exit,
-                "/quit": client_exit, "/q": client_exit}
-
-    # Descriptions of the valid commands
-    valid_commands = ("Valid commands:\n\r" +
-                      " * /rooms - See active rooms\n\r" +
-                      " * /join <room> - Join a room\n\r" +
-                      " * /who <room> - See who is in a room " +
-                      "Default: current room \n\r" +
-                      " * /leave - Leave your current room\n\r" +
-                      " * /private <user> <message> - Send a " +
-                      "private message\n\r" +
-                      " * /create <name> - Create a new room\n\r" +
-                      " * /kick <user1> <user2> ... - Kick user(s) " +
-                      "from your current room\n\r" +
-                      " * /delete <name> - Delete a room\n\r" +
-                      " * /quit - Disconnect from the server\n\n\r" +
-                      " * To use backslash without a command: //\n\r" +
-                      " * Typing backslash with only the first " +
-                      "letter of a command works as well\n\r" +
-                      "End list")
-
     # Incorrect command entered, show all valid commands
-    if cmd not in commands:
-        self.send(valid_commands, client)
+    if cmd not in COMMANDS:
+        self.send(VALID_COMMANDS, client)
 
         return False
 
     # Run a command normally
-    return commands[cmd](self, args, client)
+    return COMMANDS[cmd](self, args, client)
