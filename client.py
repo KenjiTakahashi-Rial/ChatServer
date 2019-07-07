@@ -35,6 +35,3 @@ class Client():
                 username_str +
                 room_str +
                 typing_str)
-
-    def has_name(self):
-        return self.username != ""

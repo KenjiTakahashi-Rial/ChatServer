@@ -52,6 +52,10 @@ class Server():
                 rooms_str +
                 header_str)
 
+###############################################################################
+#                              General Functions                              #
+###############################################################################
+
     def send(self, data, client):
         """
         Description:
@@ -148,7 +152,7 @@ class Server():
             None
         """
 
-        if client.has_name():
+        if client.username is not None:
             print(f"\nConnection {client.address} terminated by client " +
                   f"{client.username}\n")
 
@@ -251,7 +255,7 @@ class Server():
         """
 
         # Client has not set username yet
-        if not client.has_name():
+        if client.username is None:
             return self.set_username(client, data)
 
         # Reroute to command function
@@ -323,7 +327,9 @@ class Server():
 
         return True
 
-    # Server commands ####################################################
+    ###########################################################################
+    #                             Server Commands                             #
+    ###########################################################################
 
     def server_command(self, input, client):
         """
