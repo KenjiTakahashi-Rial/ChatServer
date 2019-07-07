@@ -67,10 +67,11 @@ class Server():
 
         try:
             # Send the data
-            client.socket.send((f"<= {data}\r\n").encode('utf-8'))
+            client.socket.send((f"\r<= {data}\r\n").encode('utf-8'))
 
-            if prompt:
-                client.socket.send("=> ".encode('utf-8'))
+            # Re-print the message the user was just typing
+            # if prompt:
+            client.socket.send(("=> " + client.typing).encode('utf-8'))
 
             return True
 
@@ -267,7 +268,8 @@ class Server():
         # User sends a message to their room
         return self.distribute(data, [client.room.name], client)
 
-    def distribute(self, data, rooms, client=None, except_users=[]):
+    def distribute(self, data, rooms, client=None, except_users=[],
+                   prompt=True):
         """
         Description:
             Distributes data to all users in a given room
@@ -307,12 +309,12 @@ class Server():
                         if client.username in self.rooms[room].admins:
                             send_user += " (admin)"
 
-                        self.send(f"{send_user}: {data}", user)
+                        self.send(f"{send_user}: {data}", user, prompt)
 
-                # Server sends a notification
+                # Server sends a message
                 else:
                     if user not in except_users:
-                        self.send(data, user)
+                        self.send(data, user, prompt)
 
         return True
 
@@ -361,8 +363,8 @@ class Server():
                               " * /private <user> <message> - Send a " +
                               "private message\n\r" +
                               " * /create <name> - Create a new room\n\r" +
-                              " * /kick <room> <user1> <user2> ... - Kick" +
-                              "user(s) from a room\n\r" +
+                              " * /kick <user1> <user2> ... - Kick user(s) " +
+                              "from your current room\n\r" +
                               " * /delete <name> - Delete a room\n\r" +
                               " * /quit - Disconnect from the server\n\n\r" +
                               " * To use backslash without a command: //\n\r" +
@@ -638,7 +640,7 @@ class Server():
 
         return True
 
-    def kick(self, args, client, deleting=False):
+    def kick(self, args, client):
         """
         Description:
             Kick one or more users from a room
@@ -652,33 +654,30 @@ class Server():
             False if an error occurred
         """
 
-        if len(args) < 2:
-            self.send("Usage: /kick <room> <user1> <user2> ...", client)
+        if len(args) == 0:
+            self.send("Usage: /kick <user1> <user2> ...", client)
 
             return False
 
-        if args[0] not in self.rooms:
-            self.send(f"Room does not exist: {args[0]}", client)
+        if client.room is None:
+            self.send("Not in a room", client)
 
             return False
-
-        # Get the room object
-        room = self.rooms[args[0]]
 
         # Check priviliges
-        if client.username != room.owner:
-            if client.username not in room.admins:
-                self.send(f"Insufficient priviliges to kick from: {args[0]}",
-                          client)
+        if client.username != client.room.owner:
+            if client.username not in client.room.admins:
+                self.send("Insufficient priviliges to kick from: " +
+                          client.room, client)
 
                 return False
 
         no_errors = True
 
-        for username in args[1:]:
+        for username in args:
 
             if username not in self.usernames:
-                self.send(f"User does not exist: {username}", client)
+                self.send(f"User does not exist: {username}", client, False)
 
                 no_errors = False
                 continue
@@ -686,34 +685,49 @@ class Server():
             # Get user object
             user = self.usernames[username]
 
-            if user not in room.users:
-                self.send(f"User not in room: {username}", client)
+            if user not in client.room.users:
+                self.send(f"User not in room: {username}", client, False)
 
                 no_errors = False
                 continue
 
             # Must be owner to kick admin
-            if username in room.admins or username == room.owner:
+            if username in client.room.admins:
                 if client.username != room.owner:
                     self.send("Insufficient priviliges to kick admin: " +
-                              f"{username}", client)
+                              f"{username}", client, False)
 
                     no_errors = False
                     continue
 
+            # Owner cannot be kicked
+            if username == client.room.owner:
+                self.send(f"Cannot kick owner from room: {client.room.owner}",
+                          client, False)
+
+                no_errors = False
+                continue
+
+            # Do not allow users to kick themselves
+            if username == client.username:
+                self.send("Cannot kick self from room", client, False)
+
+                no_errors = False
+                continue
+
+            # Actually remove the user
             user.room = None
             user.typing = ""
-
-            room.users.remove(user)
+            client.room.users.remove(user)
 
             # Notify all parties that a user was kicked
-            self.send(f"You were kicked from the room: {room.name}", user)
+            self.send(f"You were kicked from the room: {client.room.name}",
+                      user)
 
-            if not deleting:
-                self.send(f"Kicked user: {username}", client)
+            self.send(f"Kicked user: {username}", client)
 
-                self.distribute(f"{username} was kicked from the room",
-                                [room.name], except_users=[client])
+            self.distribute(f"{username} was kicked from the room",
+                            [client.room.name], None, [client])
 
         return no_errors
 
@@ -751,12 +765,25 @@ class Server():
 
             return False
 
-        # Try to kick all users in the room
-        kick_args = [args[0]] + [u.username for u in self.rooms[args[0]].users]
-        if not self.kick(kick_args, client, True):
+        # Get the room object
+        room = self.rooms[args[0]]
+
+        # Try to kick all users in the room except the owner
+        kick_args = []
+        for user in room.users:
+            if user.username != room.owner:
+                kick_args.append(user.username)
+
+        if not self.kick(kick_args, client):
             self.send(f"Failed to kick all users", client)
 
             return False
+
+        # Lastly, remove self
+        if client.room == room:
+            client.room = None
+            client.typing = ""
+            room.users.remove(client)
 
         del self.rooms[args[0]]
 

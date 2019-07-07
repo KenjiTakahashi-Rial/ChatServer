@@ -20,7 +20,7 @@ class Room():
         # List of admin usernames
         self.admins = []
 
-        # List of user objects
+        # List of client objects
         self.users = []
 
     def __str__(self):
