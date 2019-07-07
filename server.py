@@ -52,7 +52,7 @@ class Server():
                 rooms_str +
                 header_str)
 
-    def send(self, data, client, prompt=True):
+    def send(self, data, client):
         """
         Description:
             Handles sending a data to a client
@@ -110,7 +110,7 @@ class Server():
 
                     # Check for empty data
                     if len(client.typing) == 0:
-                        client.socket.send("=> ".encode('utf-8'))
+                        client.socket.send("\r=> ".encode('utf-8'))
 
                         return None
 
@@ -200,36 +200,39 @@ class Server():
             False if the username is invalid or an error occurred
         """
 
+        no_errors = True
+
         # Check username is not empty
         if len(username) == 0:
-            self.send("Username cannot be empty", client, False)
-            self.send("Username?: ", client)
+            self.send("Username cannot be empty", client)
 
-            return False
+            no_errors = False
 
         # Check username does not contain spaces
         if any([c.isspace() for c in username]):
-            self.send("Username cannot contain spaces", client, False)
-            self.send("Username?: ", client)
+            self.send("Username cannot contain spaces", client)
 
-            return False
+            no_errors = False
 
         # Check username is not taken
         if username in self.usernames:
-            self.send(f"Sorry, {username} is taken", client, False)
-            self.send("Username?: ", client)
+            self.send(f"Sorry, {username} is taken", client)
 
-            return False
+            no_errors = False
 
-        client.username = username
-        self.usernames[username] = client
+        if no_errors:
+            client.username = username
+            self.usernames[username] = client
 
-        self.send(f"Welcome, {username}!", client)
+            self.send(f"Welcome, {username}!", client)
 
-        print(f"\nClient at {client.address} set username to " +
-              f"{client.username}\n")
+            print(f"\nClient at {client.address} set username to " +
+                  f"{client.username}\n")
 
-        return True
+        else:
+            self.send("Username?: ", new_client)
+
+        return no_errors
 
     def process(self, data, client):
         """
@@ -268,8 +271,7 @@ class Server():
         # User sends a message to their room
         return self.distribute(data, [client.room.name], client)
 
-    def distribute(self, data, rooms, client=None, except_users=[],
-                   prompt=True):
+    def distribute(self, data, rooms, client=None, except_users=[]):
         """
         Description:
             Distributes data to all users in a given room
@@ -303,18 +305,19 @@ class Server():
                     if user not in except_users:
                         send_user = client.username
 
-                        # Appropriately tag owner and admins
+                        # Tag user appropriately
                         if client.username == self.rooms[room].owner:
                             send_user += " (owner)"
+
                         if client.username in self.rooms[room].admins:
                             send_user += " (admin)"
 
-                        self.send(f"{send_user}: {data}", user, prompt)
+                        self.send(f"{send_user}: {data}", user)
 
                 # Server sends a message
                 else:
                     if user not in except_users:
-                        self.send(data, user, prompt)
+                        self.send(data, user)
 
         return True
 
@@ -392,11 +395,22 @@ class Server():
             False if an error occurred
         """
 
-        self.send("Available rooms:", client, False)
+        self.send("Available rooms:", client)
 
         for room in self.rooms:
-            self.send(f" * {room} ({len(self.rooms[room].users)})",
-                      client, False)
+            room_str = f" * {room} ({len(self.rooms[room].users)})"
+
+            # Tag room appropriately
+            if client.username in self.rooms[room].admins:
+                room_str += " (admin)"
+
+            if client.username == self.rooms[room].owner:
+                room_str += " (owner)"
+
+            if client.room == self.rooms[room]:
+                room_str += " (current)"
+
+            self.send(room_str, client)
 
         self.send("End list", client)
 
@@ -503,7 +517,7 @@ class Server():
 
         # Iterate through users in room
         self.send(f"Users in: {args[0]} ({len(self.rooms[args[0]].users)})",
-                  client, False)
+                  client)
 
         for user in self.rooms[args[0]].users:
             who_user = user.username
@@ -518,7 +532,7 @@ class Server():
             if user.username == client.username:
                 who_user += " (you)"
 
-            self.send(f" * {who_user}", client, False)
+            self.send(f" * {who_user}", client)
 
         self.send("End list", client)
 
@@ -677,7 +691,7 @@ class Server():
         for username in args:
 
             if username not in self.usernames:
-                self.send(f"User does not exist: {username}", client, False)
+                self.send(f"User does not exist: {username}", client)
 
                 no_errors = False
                 continue
@@ -686,7 +700,7 @@ class Server():
             user = self.usernames[username]
 
             if user not in client.room.users:
-                self.send(f"User not in room: {username}", client, False)
+                self.send(f"User not in room: {username}", client)
 
                 no_errors = False
                 continue
@@ -695,7 +709,7 @@ class Server():
             if username in client.room.admins:
                 if client.username != room.owner:
                     self.send("Insufficient priviliges to kick admin: " +
-                              f"{username}", client, False)
+                              f"{username}", client)
 
                     no_errors = False
                     continue
@@ -703,14 +717,14 @@ class Server():
             # Owner cannot be kicked
             if username == client.room.owner:
                 self.send(f"Cannot kick owner from room: {client.room.owner}",
-                          client, False)
+                          client)
 
                 no_errors = False
                 continue
 
             # Do not allow users to kick themselves
             if username == client.username:
-                self.send("Cannot kick self from room", client, False)
+                self.send("Cannot kick self from room", client)
 
                 no_errors = False
                 continue
@@ -810,7 +824,7 @@ class Server():
                 return False
 
         # Then disconnect the client
-        self.send("Come again soon!", client, False)
+        client.socket.send("Come again soon!".encode('utf-8'))
         self.connection_terminated(client)
 
         return True
