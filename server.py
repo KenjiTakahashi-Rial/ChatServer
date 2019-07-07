@@ -69,8 +69,10 @@ class Server():
             # Send the data
             client.socket.send((f"\r<= {data}\r\n").encode('utf-8'))
 
-            # Re-print the message the user was just typing
-            # if prompt:
+            # Re-print the message the user was just typing to make it
+            # seem like the user was not interruped
+            # Only works on Windows because Linux and OS X don't send
+            # continuous data!
             client.socket.send(("=> " + client.typing).encode('utf-8'))
 
             return True
@@ -824,7 +826,7 @@ class Server():
                 return False
 
         # Then disconnect the client
-        client.socket.send("Come again soon!".encode('utf-8'))
+        client.socket.send("Come again soon!\n\r".encode('utf-8'))
         self.connection_terminated(client)
 
         return True
