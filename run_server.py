@@ -8,8 +8,8 @@ import os
 import select
 import socket
 
-import room
-import server
+from room import Room
+from server import Server
 
 
 ###############################################################################
@@ -31,13 +31,13 @@ server_socket.listen()
 
 print(f"\nListening for connections on {IP_ADDRESS}:{PORT}...\n")
 
-rooms = {"chat": room.Room("chat", None),
-         "hottub": room.Room("hottub", None),
-         "PAD": room.Room("PAD", None),
-         "anime": room.Room("anime", None)}
+rooms = {"chat": Room("chat", None),
+         "hottub": Room("hottub", None),
+         "PAD": Room("PAD", None),
+         "anime": Room("anime", None)}
 
 # Create the server object
-chat_server = server.Server(server_socket, rooms)
+chat_server = Server(server_socket, rooms)
 
 
 ###############################################################################
