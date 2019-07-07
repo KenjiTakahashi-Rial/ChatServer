@@ -8,6 +8,7 @@ import socket as socket_module
 import sys
 
 import client
+import room
 
 SOCKET_BUFFER = 4096
 
@@ -23,6 +24,8 @@ class Server():
 
     def __init__(self, server_socket, rooms={}):
         self.socket = server_socket
+
+        # A list of the sockets in the server
         self.sockets = [server_socket]
 
         # A dictionary with the client socket as the key
@@ -33,8 +36,8 @@ class Server():
         # and the client object as the value
         self.usernames = {}
 
-        # A dictionary with the clients of the room as the key
-        # and a list of client objects in the room as a value
+        # A dictionary with the name of the room as the key
+        # and a room object as a value
         self.rooms = rooms
 
     def __str__(self):
@@ -256,13 +259,13 @@ class Server():
         # Client is not in a room
         if client.room is None:
             self.send("Message not sent - not in a room. " +
-                      "Type /help for a list of commands.", client)
+                      "Type /help for a list of commands", client)
 
             return False
 
         # Normal data distribution
         # User sends a message to their room
-        return self.distribute(data, [client.room], client)
+        return self.distribute(data, [client.room.name], client)
 
     def distribute(self, data, rooms, client=None, except_users=[]):
         """
@@ -271,7 +274,7 @@ class Server():
         Arguments:
             A Server object
             Data to send
-            A list of rooms to send to
+            A list of rooms name to send to
             The client object who sent the data
             A list of client objects not to send the message to
         Return Value:
@@ -292,7 +295,7 @@ class Server():
             if room is None:
                 return False
 
-            for user in self.rooms[room]:
+            for user in self.rooms[room].users:
                 # User sends data
                 if client is not None:
                     if user not in except_users:
@@ -329,6 +332,7 @@ class Server():
 
         # Command cases dictionary
         commands = {"/rooms": self.show_rooms, "/r": self.show_rooms,
+                    "/create": self.create, "/c": self.create,
                     "/join": self.join, "/j": self.join,
                     "/who": self.who, "/w": self.who,
                     "/leave": self.leave, "/l": self.leave,
@@ -343,18 +347,19 @@ class Server():
         except KeyError as e:
             valid_commands = ("Valid commands:\n\r" +
                               " * /rooms - See active rooms.\n\r" +
+                              " * /create <name> - Create a new room\n\r" +
                               " * /join <room> - Join a room. Default: " +
                               "chat\n\r" +
                               " * /who <room> - See who is in a room. " +
                               "Default: current room \n\r" +
                               " * /leave - Leave your current room.\n\r" +
-                              " * /private <user> <message> - Send a private " +
-                              "message.\n\r" +
+                              " * /private <user> <message> - Send a " +
+                              "private message.\n\r" +
                               " * /quit - Disconnect from the server.\n\n\r" +
                               " * To use backslash without a command: //\n\r" +
                               " * Typing backslash with only the first " +
                               "letter of a command works as well\n\r" +
-                              "End list.")
+                              "End list")
 
             self.send(valid_commands, client)
 
@@ -363,7 +368,7 @@ class Server():
     def show_rooms(self, args, client):
         """
         Description:
-            Display the active rooms
+            Display the available
         Arguments:
             A Server object
             A list of arguments
@@ -373,12 +378,48 @@ class Server():
             False if an error occurred
         """
 
-        self.send("Active rooms:", client, False)
+        self.send("Available rooms:", client, False)
 
         for room in self.rooms:
-            self.send(f" * {room} ({len(self.rooms[room])})", client, False)
+            self.send(f" * {room} ({len(self.rooms[room].users)})",
+                      client, False)
 
-        self.send("End list.", client)
+        self.send("End list", client)
+
+        return True
+
+    def create(self, args, client):
+        """
+        Description:
+            Create a new room
+        Arguments:
+            A Server object
+            A list of arguments
+            The client object that issued the command
+        Return Value:
+            True if the command was carried out
+            False if an error occurred
+        """
+
+        if len(args) == 0:
+            self.send("Usage: /create <name>", client)
+
+            return False
+
+        if len(args) > 1:
+            self.send("Room name cannot contain spaces", client)
+
+            return False
+
+        if args[0] in self.rooms:
+            self.send(f"Room already exists: {args[0]} " +
+                      "({self.rooms[args[0]].users})", client)
+
+            return False
+
+        self.rooms[args[0]] = room.Room(args[0], client)
+
+        self.send(f"You created a room: {args[0]}", client)
 
         return True
 
@@ -398,32 +439,44 @@ class Server():
         """
 
         if client.room is not None:
-            self.send(f"You are already in a room: {client.room}", client)
+            self.send(f"You are already in a room: {client.room.name}", client)
 
             return False
 
+        if len(args) > 1:
+            self.send("Room name cannot contain spaces", client)
+
+            return False
+
+        # Default to chat
         if len(args) == 0:
             args.append("chat")
 
         # Add the username to the rooms dictionary
         # and the room to the client object
-        for a in args:
-            if a in self.rooms:
-                self.rooms[a].append(client)
-                client.room = a
+        if args[0] in self.rooms:
+            self.rooms[args[0]].users.append(client)
+            client.room = self.rooms[args[0]]
 
-                # Notify other users that a new user has joined
-                self.distribute(f"{client.username} joined the room.", [a],
-                                None, [client])
+            join_user = f"{client.username}"
 
-                # Notify the user that they joined the room
-                self.send(f"Joined the room: {a}", client, False)
+            # Appropriately tag owner
+            if client.room.owner == client.username:
+                join_user += " (owner)"
 
-                # Show the client who else is in the room
-                return self.who([], client)
+            # Notify other users that a new user has joined
+            self.distribute(f"{join_user} joined the room", [args[0]],
+                            None, [client])
+
+            # Notify the user that they joined the room
+            self.send(f"Joined the room: {args[0]}", client, False)
+
+            # Show the client who else is in the room
+            return self.who([], client)
 
         # Room doesn't exist
-        self.send(f"No such room: {args[0]}", client)
+        self.send(f"Room does not exist: {args[0]}", client, False)
+        self.send("To make a new room: /create <name>", client)
 
         return False
 
@@ -440,22 +493,50 @@ class Server():
             False if an error occurred
         """
 
-        # User not in a room
-        if client.room is None:
-            self.send("Not in a room.", client)
+        # Multiple arguments
+        if len(args) > 1:
+            self.send("Room name cannot contain spaces", client)
 
             return False
 
+        # Default to current room
+        if len(args) == 0:
+            # User not in a room
+            if client.room is None:
+                self.send("Not in a room", client)
+
+                return False
+
+            args.append(client.room.name)
+
+        # Room doesn't exist
+        if args[0] not in self.rooms:
+            self.send(f"Room does not exist: {args[0]}", client)
+
+            return False
+
+        # Room is empty
+        if len(self.rooms[args[0]].users) == 0:
+            self.send(f"No users in: {args[0]}", client)
+
+            return True
+
         # Iterate through users in room
-        self.send(f"Users in: {client.room}", client, False)
+        self.send(f"Users in: {args[0]}", client, False)
 
-        for user in self.rooms[client.room]:
+        for user in self.rooms[args[0]].users:
+            who_user = user.username
+
+            # Apply appropriate tags to user
+            if user.username == self.rooms[args[0]].owner:
+                who_user += " (owner)"
+
             if user.username == client.username:
-                self.send(f" * {user.username} (you)", client, False)
-            else:
-                self.send(f" * {user.username}", client, False)
+                who_user += " (you)"
 
-        self.send("End list.", client)
+            self.send(f" * {who_user}", client, False)
+
+        self.send("End list", client)
 
         return True
 
@@ -472,27 +553,30 @@ class Server():
             False if an error occurred
         """
 
-        # Notify other users that a user has left
-        self.distribute(f"{client.username} left the room.", [client.room],
-                        None, [client])
-
-        # Remove the userfrom the rooms dictionary
-        # and the room from the client object
-        if (client.room is not None):
-            # Don't print the leave message when exiting
-            if not exit:
-                self.send(f"Left the room: {client.room}", client)
-
-            self.rooms[client.room].remove(client)
-            client.room = None
-
-            return True
-
         # Client is not in a room
-        else:
-            self.send("Not in a room.", client)
+        if client.room is None:
+            self.send("Not in a room", client)
 
             return False
+
+        leave_user = client.username
+
+        # Appropriately tag owner
+        if client.username == client.room.owner:
+            leave_user += " (owner)"
+
+        # Notify other users that a user has left
+        self.distribute(f"{leave_user} left the room", [client.room.name],
+                        None, [client])
+
+        # Don't print the leave message when exiting
+        if not exit:
+            self.send(f"Left the room: {client.room.name}", client)
+
+        client.room.users.remove(client)
+        client.room = None
+
+        return True
 
     def private(self, args, client):
         """

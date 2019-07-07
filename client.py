@@ -17,8 +17,10 @@ class Client():
 
         self.username = ""
 
+        # The room object the client is currently in
         self.room = None
 
+        # A buffer for a message before the client hits enter
         self.typing = ""
 
     def has_name(self):
