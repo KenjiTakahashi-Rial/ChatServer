@@ -6,6 +6,7 @@
 
 import os
 import select
+from signal import signal, SIGPIPE, SIG_DFL
 import socket
 
 from room import Room
