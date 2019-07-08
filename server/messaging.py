@@ -132,7 +132,7 @@ def connection_terminated(self, client):
         del self.usernames[client.username]
 
     else:
-        print(f"\nConnection {str_address} terminated by unnamed client\n")
+        print(f"\nConnection {client.address} terminated by unnamed client\n")
 
     self.sockets.remove(client.socket)
 
