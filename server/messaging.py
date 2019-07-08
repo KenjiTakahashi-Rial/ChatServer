@@ -126,6 +126,9 @@ def connection_terminated(self, client):
         print(f"\nConnection {client.address} terminated by client " +
               f"{client.username}\n")
 
+        if client.room is not None:
+            client.room.users.remove(client)
+
         del self.usernames[client.username]
 
     else:
