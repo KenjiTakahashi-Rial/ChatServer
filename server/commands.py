@@ -333,7 +333,7 @@ def password(self, args, client):
     return True
 
 
-def create(self, args, client):
+def new(self, args, client):
     """
     Description:
         Create a new room
@@ -347,7 +347,7 @@ def create(self, args, client):
     """
 
     if len(args) == 0:
-        self.send("Usage: /create <name>", client)
+        self.send("Usage: /new <name>", client)
 
         return False
 
@@ -376,7 +376,7 @@ def create(self, args, client):
 def admin(self, args, client):
     """
     Description:
-        Make one or more users admins in the current room
+        Give admin privileges to one or more users
         Must have ownership
     Arguments:
         A Server object
@@ -397,9 +397,9 @@ def admin(self, args, client):
 
         return False
 
-    # Check priviliges
+    # Check privileges
     if client.username != client.room.owner:
-        self.send("Insufficient priviliges to make admin in: " +
+        self.send("Insufficient privileges to make admin in: " +
                   client.room.name, client)
 
         return False
@@ -451,6 +451,68 @@ def admin(self, args, client):
     return no_errors
 
 
+def cancel_admin(self, args, client):
+    """
+    Description:
+        Revoke admin privileges for one or more users
+        Must have ownership
+    Arguments:
+        A Server object
+        A list of arguments
+        The client object that issued the command
+    Return Value:
+        True if the command was carried out
+        False if an error occurred
+    """
+
+    if len(args) == 0:
+        self.send("Usage: /canceladmin <user1> <user2> ...", client)
+
+        return False
+
+    if client.room is None:
+        self.send("Not in a room", client)
+
+        return False
+
+    # Check privileges
+    if client.username != client.room.owner:
+        self.send("Insufficient privileges to cancel admin in: " +
+                  client.room.name, client)
+
+        return False
+
+    no_errors = True
+
+    for username in args:
+
+        if username not in self.usernames and username not in self.passwords:
+            self.send(f"User does not exist: {username}", client)
+
+            no_errors = False
+            continue
+
+        if username not in client.room.admins:
+            self.send(f"User not admin: {username}", client)
+
+            no_errors = False
+            continue
+
+        client.room.admins.remove(username)
+
+        # Notify all parties that a user was banned
+        if username in self.usernames:
+            self.send(f"You were demoted from admin in: {client.room.name}",
+                      self.usernames[username])
+
+        self.send(f"Revoked admin: {username}", client)
+
+        self.distribute(f"{username} was demoted from admin",
+                        [client.room.name], None, [client])
+
+    return no_errors
+
+
 def kick(self, args, client):
     """
     Description:
@@ -475,10 +537,10 @@ def kick(self, args, client):
 
         return False
 
-    # Check priviliges
+    # Check privileges
     if client.username != client.room.owner:
         if client.username not in client.room.admins:
-            self.send("Insufficient priviliges to kick from: " +
+            self.send("Insufficient privileges to kick from: " +
                       client.room.name, client)
 
             return False
@@ -505,7 +567,7 @@ def kick(self, args, client):
         # Must be owner to kick admin
         if username in client.room.admins:
             if client.username != client.room.owner:
-                self.send("Insufficient priviliges to kick admin: " +
+                self.send("Insufficient privileges to kick admin: " +
                           f"{username}", client)
 
                 no_errors = False
@@ -520,7 +582,7 @@ def kick(self, args, client):
 
         # Owner cannot be kicked
         if username == client.room.owner:
-            self.send(f"Cannot kick owner from room: {client.room.owner}",
+            self.send(f"Cannot kick owner: {client.room.owner}",
                       client)
 
             no_errors = False
@@ -567,10 +629,10 @@ def ban(self, args, client):
 
         return False
 
-    # Check priviliges
+    # Check privileges
     if client.username != client.room.owner:
         if client.username not in client.room.admins:
-            self.send("Insufficient priviliges to ban from: " +
+            self.send("Insufficient privileges to ban from: " +
                       client.room.name, client)
 
             return False
@@ -594,7 +656,7 @@ def ban(self, args, client):
         # Must be owner to ban admin
         if username in client.room.admins:
             if client.username != client.room.owner:
-                self.send("Insufficient priviliges to ban admin: " +
+                self.send("Insufficient privileges to ban admin: " +
                           f"{username}", client)
 
                 no_errors = False
@@ -663,10 +725,10 @@ def unban(self, args, client):
 
         return False
 
-    # Check priviliges
+    # Check privileges
     if client.username != client.room.owner:
         if client.username not in client.room.admins:
-            self.send("Insufficient priviliges to unban: " +
+            self.send("Insufficient privileges to unban in: " +
                       client.room.name, client)
 
             return False
@@ -690,7 +752,7 @@ def unban(self, args, client):
         # Must be owner to lift ban on admin
         if username in client.room.admins:
             if client.username != client.room.owner:
-                self.send("Insufficient priviliges to unban admin: " +
+                self.send("Insufficient privileges to unban admin: " +
                           f"{username}", client)
 
                 no_errors = False
@@ -739,7 +801,7 @@ def delete(self, args, client):
         return False
 
     if client.username != self.rooms[args[0]].owner:
-        self.send(f"Insufficient priviliges to delete: {args[0]}", client)
+        self.send(f"Insufficient privileges to delete: {args[0]}", client)
 
         return False
 
@@ -791,9 +853,10 @@ COMMANDS = {"/rooms": show_rooms, "/r": show_rooms,
             "/who": who, "/w": who,
             "/leave": leave, "/l": leave,
             "/private": private, "/p": private,
-            "/setpassword": password, "/s": password,
-            "/create": create, "/c": create,
+            "/set": password, "/s": password,
+            "/new": new, "/n": new,
             "/admin": admin, "/a": admin,
+            "/canceladmin": cancel_admin, "/c": cancel_admin,
             "/kick": kick, "/k": kick,
             "/ban": ban, "/b": ban,
             "/unban": unban, "/u": unban,
@@ -811,14 +874,16 @@ VALID_COMMANDS = ("Valid commands:\n\r" +
                   " * /private <user> <message> - Send a " +
                   "private message\n\r" +
                   " * /setpassword - Set a password for your username\n\r" +
-                  " * /create <name> - Create a new room\n\r" +
+                  " * /new <name> - Create a new room\n\r" +
                   " * /admin <user1> <user2> ... - Make user(s) " +
                   " admins of your current room\n\r" +
+                  " * /canceladmin <user1> <user2> ... - Revoke admin " +
+                  "privileges for user(s)\n\r" +
                   " * /kick <user1> <user2> ... - Kick user(s) " +
                   "from your current room\n\r" +
                   " * /ban <user1> <user2> ... - Ban user(s) " +
                   "from your current room\n\r" +
-                  " * /unban <user1> <user2> ... - Lift ban on user(s) " +
+                  " * /unban <user1> <user2> ... - Unban user(s) " +
                   "from your current room \n\r" +
                   " * /delete <name> - Delete a room. " +
                   "Default: current room\n\r" +
