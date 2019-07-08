@@ -68,6 +68,11 @@ def receive(self, client):
     try:
         data = client.socket.recv(SOCKET_BUFFER).decode('utf-8')
 
+        if len(data) == 0:
+            self.connection_terminated(client)
+
+            return False
+
         client.typing += data
 
         # The user hit enter
