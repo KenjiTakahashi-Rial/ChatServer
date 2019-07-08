@@ -32,23 +32,23 @@ def send(self, data, client):
         False if an error occurred
     """
 
-    try:
-        # Send the data
-        client.socket.send((f"\r<= {data}\r\n").encode('utf-8'))
+    # try:
+    # Send the data
+    client.socket.send((f"\r<= {data}\r\n").encode('utf-8'))
 
-        # Re-print the message the user was just typing to make it
-        # seem like the user was not interruped
-        # Only works on Windows because Linux and OS X don't send
-        # continuous data!
-        client.socket.send(("=> " + client.typing).encode('utf-8'))
+    # Re-print the message the user was just typing to make it
+    # seem like the user was not interruped
+    # Only works on Windows because Linux and OS X don't send
+    # continuous data!
+    client.socket.send(("=> " + client.typing).encode('utf-8'))
 
-        return True
+    return True
 
-    # Catch and display exceptions without crashing
-    except Exception as e:
-        print(f"\nsend() error: {e}\n")
+    # # Catch and display exceptions without crashing
+    # except Exception as e:
+    #     print(f"\nsend() error: {e}\n")
 
-        return False
+    #     return False
 
 
 def receive(self, client):
@@ -65,49 +65,49 @@ def receive(self, client):
         False if an error occurred
     """
 
-    try:
-        data = client.socket.recv(SOCKET_BUFFER).decode('utf-8')
+    # try:
+    data = client.socket.recv(SOCKET_BUFFER).decode('utf-8')
 
-        if len(data) == 0:
-            self.connection_terminated(client)
+    if len(data) == 0:
+        self.connection_terminated(client)
 
-            return False
+        return False
 
-        client.typing += data
+    client.typing += data
 
-        # The user hit enter
-        if client.typing[-1] == '\n':
+    # The user hit enter
+    if client.typing[-1] == '\n':
+        client.typing = client.typing[:-1]
+
+        # For Windows remove the carriage return
+        if client.typing[-1] == '\r':
             client.typing = client.typing[:-1]
-
-            # For Windows remove the carriage return
-            if client.typing[-1] == '\r':
-                client.typing = client.typing[:-1]
-
-                # Check for empty data
-                if len(client.typing) == 0:
-                    client.socket.send("\r=> ".encode('utf-8'))
-
-                    return None
 
             # Check for empty data
             if len(client.typing) == 0:
-                client.socket.send("\r\n=> ".encode('utf-8'))
+                client.socket.send("\r=> ".encode('utf-8'))
 
                 return None
 
-            # Non-empty data
-            message = client.typing
-            client.typing = ""
+        # Check for empty data
+        if len(client.typing) == 0:
+            client.socket.send("\r\n=> ".encode('utf-8'))
 
-            return message
+            return None
 
-        return None
+        # Non-empty data
+        message = client.typing
+        client.typing = ""
 
-    # Catch and display exceptions without crashing
-    except Exception as e:
-        print(f"\nreceive() error: {e}\n")
+        return message
 
-        return False
+    return None
+
+    # # Catch and display exceptions without crashing
+    # except Exception as e:
+    #     print(f"\nreceive() error: {e}\n")
+
+    #     return False
 
 
 def connection_terminated(self, client):
