@@ -6,7 +6,6 @@
 
 import os
 import select
-from signal import signal, SIGPIPE, SIG_DFL
 import socket
 
 from room import Room
@@ -18,7 +17,7 @@ from server import Server
 ###############################################################################
 
 
-IP_ADDRESS = ""  # socket.gethostbyname(socket.gethostname())
+IP_ADDRESS = socket.gethostbyname(socket.gethostname())
 PORT = int(os.environ.get("PORT", 1081))
 
 # Set up the server socket and start listening
