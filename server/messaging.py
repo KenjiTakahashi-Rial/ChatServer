@@ -32,6 +32,9 @@ def send(self, data, client):
         False if an error occurred
     """
 
+    if client.socket == self.socket:
+        return False
+
     # try:
     # Send the data
     client.socket.send((f"\r<= {data}\r\n").encode('utf-8'))
