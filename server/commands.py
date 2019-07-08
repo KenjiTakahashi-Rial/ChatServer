@@ -264,6 +264,75 @@ def private(self, args, client):
     return sent_to and sent_from
 
 
+def password(self, args, client):
+    """
+    Description:
+        Set a password associated with a username
+    Arguments:
+        A Server object
+        A list of arguments or an int/string depending on which stage
+        of setting a password one is in
+        The client object that issued the command
+    Return Value:
+        True if the command was carried out
+        False if an error occurred
+    """
+
+    if isinstance(args, list) and len(args) > 0:
+        self.send("Usage: /setpassword", client)
+
+        client.setting_password = 0
+
+        return False
+
+    # Ask for old password or new password
+    if client.setting_password == 0:
+        if client.username in self.passwords:
+            self.send("Old password:", client)
+
+            client.setting_password = 1
+
+        else:
+            self.send("New password:", client)
+
+            client.setting_password = 2
+
+    elif client.setting_password == 1:
+        if args != self.passwords[client.username]:
+            self.send("Incorrect password", client)
+
+            client.setting_password = 0
+
+            return False
+
+        else:
+            self.send("New password:", client)
+
+            client.setting_password = 2
+
+    elif client.setting_password == 2:
+        self.send("Confirm password:", client)
+
+        client.setting_password = args
+
+    else:
+        if args != client.setting_password:
+            self.send("Passwords did not match", client)
+
+            client.setting_password = 0
+
+            return False
+
+        else:
+            self.passwords[client.username] = args
+
+            self.send("Password set!", client)
+
+            client.setting_password = 0
+
+    return True
+
+
 def create(self, args, client):
     """
     Description:
@@ -562,6 +631,7 @@ COMMANDS = {"/rooms": show_rooms, "/r": show_rooms,
             "/who": who, "/w": who,
             "/leave": leave, "/l": leave,
             "/private": private, "/p": private,
+            "/setpassword": password, "/s": password,
             "/create": create, "/c": create,
             "/kick": kick, "/k": kick,
             "/ban": ban, "/b": ban,
@@ -578,6 +648,7 @@ VALID_COMMANDS = ("Valid commands:\n\r" +
                   " * /leave - Leave your current room\n\r" +
                   " * /private <user> <message> - Send a " +
                   "private message\n\r" +
+                  " * /setpassword - Set a password for your username\n\r" +
                   " * /create <name> - Create a new room\n\r" +
                   " * /kick <user1> <user2> ... - Kick user(s) " +
                   "from your current room\n\r" +

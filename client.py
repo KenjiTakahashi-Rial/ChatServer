@@ -23,6 +23,16 @@ class Client():
         # A buffer for a message before the client hits enter
         self.typing = ""
 
+        # Indicates whether the user is currently logging in
+        self.logging_in = False
+
+        # Indicates whether the user is setting a password
+        # 0 if not settings a password
+        # 1 if typing current password
+        # 2 if typing new password
+        # A string of the new password if confirming new password
+        self.setting_password = 0
+
     def __str__(self):
         socket_str = f"socket: {self.socket}\n\n"
         address_str = f"address: {self.address}\n\n"

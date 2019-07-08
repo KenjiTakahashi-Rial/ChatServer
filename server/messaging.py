@@ -7,6 +7,7 @@
 import socket
 
 from client import Client
+from .commands import password
 
 SOCKET_BUFFER = 4096
 
@@ -120,6 +121,8 @@ def connection_terminated(self, client):
         print(f"\nConnection {client.address} terminated by client " +
               f"{client.username}\n")
 
+        del self.usernames[client.username]
+
     else:
         print(f"\nConnection {str_address} terminated by unnamed client\n")
 
@@ -156,6 +159,37 @@ def initialize_client(self, client_socket):
     return new_client
 
 
+def login(self, client, password):
+    """
+    Description:
+        Attempt to log in with a certain username
+    Arguments:
+        A Server object
+        The client attempting to log in
+    Return Value:
+        True if the login was processed successfully
+        False if an error occurred
+    """
+
+    # Check against saved password
+    if self.passwords[client.username] != password:
+        client.username = None
+        client.logging_in = False
+
+        self.send("Incorrect password", client)
+        self.send("Username:", client)
+
+        return False
+
+    else:
+        self.usernames[client.username] = client
+        client.logging_in = False
+
+        self.send(f"Welcome back, {client.username}!", client)
+
+        return True
+
+
 def set_username(self, client, username):
     """
     Descripton:
@@ -179,28 +213,44 @@ def set_username(self, client, username):
         no_errors = False
 
     # Check username does not contain spaces
-    if any([c.isspace() for c in username]):
+    elif any([c.isspace() for c in username]):
         self.send("Username cannot contain spaces", client)
 
         no_errors = False
 
+    # Check if user has a password
+    elif username in self.passwords:
+        # Check if user already logged in
+        if username in self.usernames:
+            self.send(f"User already logged in: {username}", client)
+
+            no_errors = False
+
     # Check username is not taken
-    if username in self.usernames:
+    elif username in self.usernames:
         self.send(f"Sorry, {username} is taken", client)
 
         no_errors = False
 
     if no_errors:
+        # Set the clients username for now
         client.username = username
-        self.usernames[username] = client
-
-        self.send(f"Welcome, {username}!", client)
 
         print(f"\nClient at {client.address} set username to " +
               f"{client.username}\n")
 
+        if username in self.passwords:
+            client.logging_in = True
+
+            self.send("Password:", client)
+
+        else:
+            self.usernames[username] = client
+
+            self.send(f"Welcome, {username}!", client)
+
     else:
-        self.send("Username?: ", client)
+        self.send("Username:", client)
 
     return no_errors
 
@@ -222,6 +272,12 @@ def process(self, data, client):
     # Client has not set username yet
     if client.username is None:
         return self.set_username(client, data)
+
+    if client.logging_in:
+        return login(self, client, data)
+
+    if isinstance(client.setting_password, str) or client.setting_password > 0:
+        return password(self, data, client)
 
     # Reroute to command function
     if data[0] == '/':

@@ -14,16 +14,25 @@ class Server():
     def __init__(self, server_socket, rooms={}):
         self.socket = server_socket
 
-        # A list of the sockets in the server
+        # A list of all sockets connected to the server
+        # including the server socket, itself
         self.sockets = [server_socket]
 
         # A dictionary with the client socket as the key
         # and the client object as the value
+        # Only currently connected users should be in here
         self.clients = {}
 
         # A dictionary with the client username as the key
         # and the client object as the value
+        # Only currently connected users should be in here
         self.usernames = {}
+
+        # A dictionary with the username as the key
+        # and the password as the value
+        # All recoreded users (connected or disconnected)
+        # should be in here
+        self.passwords = {}
 
         # A dictionary with the name of the room as the key
         # and a room object as a value
