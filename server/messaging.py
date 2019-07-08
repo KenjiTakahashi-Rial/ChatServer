@@ -103,6 +103,14 @@ def receive(self, client):
 
         return None
 
+    # Catch connection forcibly closed
+    except ConnectionResetError as e:
+        print(f"\nreceive() error: {e}\n")
+
+        self.connection_terminated(client)
+
+        return False
+
     # Catch and display exceptions without crashing
     except Exception as e:
         print(f"\nreceive() error: {e}\n")

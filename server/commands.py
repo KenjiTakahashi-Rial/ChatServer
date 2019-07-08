@@ -241,7 +241,7 @@ def private(self, args, client):
 
         return False
 
-    if args[0] not in usernames:
+    if args[0] not in self.usernames:
         self.send(f"User not found: {args[0]}", client)
 
         return False
@@ -793,10 +793,10 @@ def delete(self, args, client):
         return False
 
     if len(args) == 0:
-        args.append(client.room)
+        args.append(client.room.name)
 
     if args[0] not in self.rooms:
-        self.send(f"Room does not exist {args[0]}", client)
+        self.send(f"Room does not exist: {args[0]}", client)
 
         return False
 
@@ -853,7 +853,7 @@ COMMANDS = {"/rooms": show_rooms, "/r": show_rooms,
             "/who": who, "/w": who,
             "/leave": leave, "/l": leave,
             "/private": private, "/p": private,
-            "/set": password, "/s": password,
+            "/setpassword": password, "/s": password,
             "/new": new, "/n": new,
             "/admin": admin, "/a": admin,
             "/canceladmin": cancel_admin, "/c": cancel_admin,
