@@ -504,7 +504,7 @@ def kick(self, args, client):
 
         # Must be owner to kick admin
         if username in client.room.admins:
-            if client.username != room.owner:
+            if client.username != client.room.owner:
                 self.send("Insufficient priviliges to kick admin: " +
                           f"{username}", client)
 
@@ -513,7 +513,7 @@ def kick(self, args, client):
 
         # Do not allow users to kick themselves
         if username == client.username:
-            self.send("Cannot kick self from room", client)
+            self.send("Cannot kick self", client)
 
             no_errors = False
             continue
@@ -532,12 +532,12 @@ def kick(self, args, client):
         client.room.users.remove(user)
 
         # Notify all parties that a user was kicked
-        self.send(f"You were kicked from the room: {client.room.name}",
+        self.send(f"You were kicked from: {client.room.name}",
                   user)
 
         self.send(f"Kicked user: {username}", client)
 
-        self.distribute(f"{username} was kicked from the room",
+        self.distribute(f"{username} was kicked",
                         [client.room.name], None, [client])
 
     return no_errors
@@ -593,7 +593,7 @@ def ban(self, args, client):
 
         # Must be owner to ban admin
         if username in client.room.admins:
-            if client.username != room.owner:
+            if client.username != client.room.owner:
                 self.send("Insufficient priviliges to ban admin: " +
                           f"{username}", client)
 
@@ -602,14 +602,14 @@ def ban(self, args, client):
 
         # Do not allow users to ban themselves
         if username == client.username:
-            self.send("Cannot ban self from room", client)
+            self.send("Cannot ban self", client)
 
             no_errors = False
             continue
 
         # Owner cannot be banned
         if username == client.room.owner:
-            self.send(f"Cannot ban owner from room: {client.room.owner}",
+            self.send(f"Cannot ban owner: {client.room.owner}",
                       client)
 
             no_errors = False
@@ -627,12 +627,85 @@ def ban(self, args, client):
         client.room.banned.append(user.username)
 
         # Notify all parties that a user was banned
-        self.send(f"You were banned from a room: {client.room.name}",
-                  user)
+        if username in self.usernames:
+            self.send(f"You were banned from: {client.room.name}",
+                      user)
 
         self.send(f"Banned user: {username}", client)
 
-        self.distribute(f"{username} was banned from the room",
+        self.distribute(f"{username} was banned",
+                        [client.room.name], None, [client])
+
+    return no_errors
+
+
+def unban(self, args, client):
+    """
+    Description:
+        Lift ban on a user from a room
+        Must have adminship or ownership
+    Arguments:
+        A Server object
+        A list of arguments
+        The client object that issued the command
+    Return Value:
+        True if the command was carried out
+        False if an error occurred
+    """
+
+    if len(args) == 0:
+        self.send("Usage: /unban <user1> <user2> ...", client)
+
+        return False
+
+    if client.room is None:
+        self.send("Not in a room", client)
+
+        return False
+
+    # Check priviliges
+    if client.username != client.room.owner:
+        if client.username not in client.room.admins:
+            self.send("Insufficient priviliges to unban: " +
+                      client.room.name, client)
+
+            return False
+
+    no_errors = True
+
+    for username in args:
+
+        if username not in self.usernames and username not in self.passwords:
+            self.send(f"User does not exist: {username}", client)
+
+            no_errors = False
+            continue
+
+        if username not in client.room.banned:
+            self.send(f"User not banned: {username}", client)
+
+            no_errors = False
+            continue
+
+        # Must be owner to lift ban on admin
+        if username in client.room.admins:
+            if client.username != client.room.owner:
+                self.send("Insufficient priviliges to unban admin: " +
+                          f"{username}", client)
+
+                no_errors = False
+                continue
+
+        client.room.banned.remove(username)
+
+        # Notify all parties that a user was banned
+        if username in self.usernames:
+            self.send(f"Your were unbanned from: {client.room.name}",
+                      self.usernames[username])
+
+        self.send(f"Unbanned user: {username}", client)
+
+        self.distribute(f"{username} was unbanned",
                         [client.room.name], None, [client])
 
     return no_errors
@@ -723,6 +796,7 @@ COMMANDS = {"/rooms": show_rooms, "/r": show_rooms,
             "/admin": admin, "/a": admin,
             "/kick": kick, "/k": kick,
             "/ban": ban, "/b": ban,
+            "/unban": unban, "/u": unban,
             "/delete": delete, "/d": delete,
             "/exit": client_exit, "/x": client_exit,
             "/quit": client_exit, "/q": client_exit}
