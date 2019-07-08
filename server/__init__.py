@@ -14,6 +14,9 @@ class Server():
     def __init__(self, server_socket, rooms={}):
         self.socket = server_socket
 
+        self.address = (f"{server_socket.getsockname()[0]}:" +
+                        f"{server_socket.getsockname()[1]}")
+
         # A list of all sockets connected to the server
         # including the server socket, itself
         self.sockets = [server_socket]

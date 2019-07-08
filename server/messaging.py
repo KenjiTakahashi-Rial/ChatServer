@@ -32,7 +32,7 @@ def send(self, data, client):
         False if an error occurred
     """
 
-    if client.socket == self.socket:
+    if client.socket == self.socket or client.address == self.address:
         return False
 
     # try:
