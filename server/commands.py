@@ -585,8 +585,11 @@ def ban(self, args, client):
             no_errors = False
             continue
 
-        # Get user object
-        user = self.usernames[username]
+        if username in client.room.banned:
+            self.send(f"User already banned: {username}", client)
+
+            no_errors = False
+            continue
 
         # Must be owner to ban admin
         if username in client.room.admins:
@@ -611,6 +614,9 @@ def ban(self, args, client):
 
             no_errors = False
             continue
+
+        # Get user object
+        user = self.usernames[username]
 
         # Remove the user first
         if user in client.room.users:
@@ -738,6 +744,8 @@ VALID_COMMANDS = ("Valid commands:\n\r" +
                   "from your current room\n\r" +
                   " * /ban <user1> <user2> ... - Ban user(s) " +
                   "from your current room\n\r" +
+                  " * /unban <user1> <user2> ... - Lift ban on user(s) " +
+                  "from your current room \n\r" +
                   " * /delete <name> - Delete a room. " +
                   "Default: current room\n\r" +
                   " * /quit - Disconnect from the server\n\r" +
