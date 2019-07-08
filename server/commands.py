@@ -326,7 +326,7 @@ def password(self, args, client):
         else:
             self.passwords[client.username] = args
 
-            self.send("Password set!", client)
+            self.send("Password set", client)
 
             client.setting_password = 0
 
@@ -351,6 +351,11 @@ def create(self, args, client):
 
         return False
 
+    if client.username not in self.passwords:
+        self.send("Must set password to create room", client)
+
+        return False
+
     if len(args) > 1:
         self.send("Room name cannot contain spaces", client)
 
@@ -366,6 +371,84 @@ def create(self, args, client):
     self.send(f"You created a room: {args[0]}", client)
 
     return True
+
+
+def admin(self, args, client):
+    """
+    Description:
+        Make one or more users admins in the current room
+        Must have ownership
+    Arguments:
+        A Server object
+        A list of arguments
+        The client object that issued the command
+    Return Value:
+        True if the command was carried out
+        False if an error occurred
+    """
+
+    if len(args) == 0:
+        self.send("Usage: /admin <user1> <user2> ...", client)
+
+        return False
+
+    if client.room is None:
+        self.send("Not in a room", client)
+
+        return False
+
+    # Check priviliges
+    if client.username != client.room.owner:
+        self.send("Insufficient priviliges to make admin in: " +
+                  client.room.name, client)
+
+        return False
+
+    no_errors = True
+
+    for username in args:
+
+        if username not in self.passwords:
+            if username not in self.usernames:
+                self.send(f"User does not exist: {username}", client)
+
+            else:
+                self.send(f"User must set password to be admin: {username}",
+                          client)
+
+            no_errors = False
+            continue
+
+        # Get user object
+        user = self.usernames[username]
+
+        # Already admin
+        if username in client.room.admins:
+            self.send(f"User already admin: {username}", client)
+
+            no_errors = False
+            continue
+
+        # Owner cannot be admin
+        if username == client.username:
+            self.send("You are the owner", client)
+
+            no_errors = False
+            continue
+
+        # Promote the user
+        client.room.admins.append(user.username)
+
+        # Notify all parties that a user was kicked
+        self.send(f"You were promoted to admin in: {client.room.name}",
+                  user)
+
+        self.send(f"Made admin: {username}", client)
+
+        self.distribute(f"{username} was promoted to admin",
+                        [client.room.name], None, [client, user])
+
+    return no_errors
 
 
 def kick(self, args, client):
@@ -396,7 +479,7 @@ def kick(self, args, client):
     if client.username != client.room.owner:
         if client.username not in client.room.admins:
             self.send("Insufficient priviliges to kick from: " +
-                      client.room, client)
+                      client.room.name, client)
 
             return False
 
@@ -404,7 +487,7 @@ def kick(self, args, client):
 
     for username in args:
 
-        if username not in self.usernames:
+        if username not in self.usernames and username not in self.passwords:
             self.send(f"User does not exist: {username}", client)
 
             no_errors = False
@@ -488,7 +571,7 @@ def ban(self, args, client):
     if client.username != client.room.owner:
         if client.username not in client.room.admins:
             self.send("Insufficient priviliges to ban from: " +
-                      client.room, client)
+                      client.room.name, client)
 
             return False
 
@@ -496,7 +579,7 @@ def ban(self, args, client):
 
     for username in args:
 
-        if username not in self.usernames:
+        if username not in self.usernames and username not in self.passwords:
             self.send(f"User does not exist: {username}", client)
 
             no_errors = False
@@ -584,9 +667,7 @@ def delete(self, args, client):
     # Get the room object
     room = self.rooms[args[0]]
 
-    print([user.username for user in room.users])
     for user in room.users:
-        print(user.username)
         user.room = None
         user.typing = ""
 
@@ -633,6 +714,7 @@ COMMANDS = {"/rooms": show_rooms, "/r": show_rooms,
             "/private": private, "/p": private,
             "/setpassword": password, "/s": password,
             "/create": create, "/c": create,
+            "/admin": admin, "/a": admin,
             "/kick": kick, "/k": kick,
             "/ban": ban, "/b": ban,
             "/delete": delete, "/d": delete,
@@ -650,16 +732,18 @@ VALID_COMMANDS = ("Valid commands:\n\r" +
                   "private message\n\r" +
                   " * /setpassword - Set a password for your username\n\r" +
                   " * /create <name> - Create a new room\n\r" +
+                  " * /admin <user1> <user2> ... - Make user(s) " +
+                  " admins of your current room\n\r" +
                   " * /kick <user1> <user2> ... - Kick user(s) " +
                   "from your current room\n\r" +
                   " * /ban <user1> <user2> ... - Ban user(s) " +
                   "from your current room\n\r" +
                   " * /delete <name> - Delete a room. " +
                   "Default: current room\n\r" +
-                  " * /quit - Disconnect from the server\n\n\r" +
-                  " * To use backslash without a command: //\n\r" +
+                  " * /quit - Disconnect from the server\n\r" +
                   " * Typing backslash with only the first " +
                   "letter of a command works as well\n\r" +
+                  " * To use backslash without a command: //\n\r" +
                   "End list")
 
 
